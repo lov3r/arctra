@@ -4,9 +4,114 @@
 
 ---
 
-## Current Phase: BOOT-003 (READY)
+## Current Phase: BOOT-004 (READY)
 
-**Previous Phase:** BOOT-002 ✅ COMPLETE (2026-08-14)
+**Previous Phase:** BOOT-003 ✅ COMPLETE (2026-08-14)
+
+---
+
+## BOOT-003 Final Report
+
+### What Was Completed
+
+**BOOT-003: AgentClient 最小调用闭环**
+
+Verified the minimal call path using Fake Model, proving the kernel contract works:
+
+1. **Runtime Contract (1 interface)**
+   - `AgentRuntime` — Kernel internal contract for executing agents
+   - Intentionally package-private (not public yet)
+   - Minimal contract: `execute(AgentDefinition, AgentRequest) → AgentResult`
+
+2. **Fake Implementation (1 test class)**
+   - `FakeAgentRuntime` — Returns fixed fake response
+   - No real model, no engine abstraction
+   - Proves the call path works
+
+3. **Call Path Verified**
+   ```java
+   AgentRuntime runtime = new FakeAgentRuntime();
+   AgentDefinition definition = new AgentDefinition("test", "desc");
+   AgentRequest request = new AgentRequest("Hello");
+   
+   AgentResult result = runtime.execute(definition, request);
+   // ✅ Works!
+   ```
+
+4. **Architecture Protection**
+   - ArchUnit: Runtime !→ Client (forbid direction)
+   - ArchUnit: Agent models !→ Runtime/Client (forbid direction)
+   - No rules dictating implementation structure
+
+5. **Test Coverage**
+   - Unit tests: 3 tests covering runtime contract
+   - Architecture tests: 6 rules (2 new forbid rules)
+   - All tests pass: 21/21
+
+### Key Decisions
+
+1. **No AgentClient yet**
+   - Reason: No Agent Registry/Resolution mechanism exists
+   - `client.agent("name")` would fake "agent selection" semantics
+   - AgentClient postponed until concrete user-facing semantics are validated
+   - Current approach is honest: test explicitly creates AgentDefinition
+
+2. **AgentRuntime is package-private**
+   - Reason: Internal kernel contract, not stabilized yet
+   - Follows: internal first → real usage → stabilize → public
+   - Whether it becomes public extension SPI determined by future usage
+
+3. **No ExecutionEngine abstraction**
+   - Reason: BOOT-004's explicit goal
+   - Fake Model doesn't need engine abstraction
+   - Adding it now would be premature
+
+4. **Minimal contract**
+   - Only `execute(definition, request) → result`
+   - No Session, no Execution tracking, no State Machine
+   - No Budget, no Policy, no Evidence
+
+5. **ArchUnit rules forbid directions, not dictate structure**
+   - Removed: rules requiring specific dependencies
+   - Added: rules forbidding wrong directions (runtime → client, agent → runtime)
+
+### Verification Results
+
+All Acceptance Criteria met:
+
+- ✅ AgentRuntime contract defined
+- ✅ FakeAgentRuntime works
+- ✅ execute(def, req) → result call path verified
+- ✅ No Agent Registry/Resolution (no fake semantics)
+- ✅ AgentRuntime is package-private
+- ✅ Dependency directions protected by ArchUnit
+- ✅ ./mvnw clean verify passes (4.3s)
+- ✅ No Session/Execution/Engine abstractions
+- ✅ No Client/Factory/Registry
+- ✅ Tests: 21/21 passed
+
+### Code Statistics
+
+- Production code: 1 file, ~25 lines
+- Test code: 2 files, ~70 lines
+- Total: 3 files, ~95 lines
+- Build time: 4.3 seconds
+- Test results: 21/21 passed (16 BOOT-002 + 3 BOOT-003 + 2 ArchUnit new)
+
+### What Was NOT Done (Non-Goals)
+
+As planned, explicitly deferred:
+
+❌ AgentClient → Postponed until user-facing semantics validated
+❌ Agent Registry/Resolution → No mechanism exists yet
+❌ ExecutionEngine abstraction → BOOT-004's goal
+❌ AgentSession management → Stateless call only
+❌ AgentExecution tracking → No execution domain
+❌ State Machine → Future
+❌ Budget/Policy/Evidence → Future
+❌ Spring integration → Future
+❌ Real Model integration → Future
+❌ Tool/RAG → Future
 
 ---
 

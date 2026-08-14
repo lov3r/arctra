@@ -104,7 +104,7 @@ Claude 先输出：
 
 ## BOOT-003 --- AgentClient 最小调用闭环
 
-状态：READY
+状态：DONE ✅
 
 目标：使用 Fake Model 跑通最小调用路径，不引入 Tool/RAG。
 
@@ -112,7 +112,7 @@ Claude 先输出：
 
 ## BOOT-004 --- ExecutionEngine Contract
 
-状态：BACKLOG
+状态：READY
 
 只有 AgentClient / Runtime 基本语义通过代码验证后才能开始。
 

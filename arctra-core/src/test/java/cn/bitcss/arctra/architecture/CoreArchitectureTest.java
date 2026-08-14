@@ -59,4 +59,24 @@ class CoreArchitectureTest {
           .dependOnClassesThat()
           .resideInAnyPackage("redis.clients..")
           .because("Core must not depend on Redis");
+
+  @ArchTest
+  static final ArchRule runtime_does_not_depend_on_client =
+      noClasses()
+          .that()
+          .resideInAnyPackage("cn.bitcss.arctra.runtime..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage("cn.bitcss.arctra.client..")
+          .because("Runtime should not depend on Client");
+
+  @ArchTest
+  static final ArchRule agent_models_do_not_depend_on_runtime_or_client =
+      noClasses()
+          .that()
+          .resideInAnyPackage("cn.bitcss.arctra.agent..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage("cn.bitcss.arctra.runtime..", "cn.bitcss.arctra.client..")
+          .because("Agent models should not depend on Runtime or Client");
 }
