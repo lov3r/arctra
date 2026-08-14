@@ -12,7 +12,7 @@ WIP Limit：**同时只能有 1 个实现任务。**
 
 ## BOOT-001 --- Repository Bootstrap
 
-状态：READY
+状态：DONE ✅
 
 ### 目标
 
@@ -86,7 +86,7 @@ Claude 先输出：
 
 ## BOOT-002 --- Agent Kernel Domain Skeleton
 
-状态：BACKLOG
+状态：READY
 
 只有 BOOT-001 DONE 后才能开始。
 
