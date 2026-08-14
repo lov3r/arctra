@@ -5,13 +5,13 @@ import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
 
 /**
- * Fake agent runtime for testing the runtime contract.
+ * Fake execution engine for testing the execution engine contract.
  *
- * <p>Returns a simple fake response without invoking any real model or engine.
+ * <p>Returns a simple fake response without any real execution logic.
  *
  * @author lov3r
  */
-class FakeAgentRuntime implements AgentRuntime {
+class FakeExecutionEngine implements AgentExecutionEngine {
 
   @Override
   public AgentResult execute(AgentDefinition definition, AgentRequest request) {

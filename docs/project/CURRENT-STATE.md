@@ -4,9 +4,132 @@
 
 ---
 
-## Current Phase: BOOT-004 (READY)
+## Current Phase: BOOT-005 (READY)
 
-**Previous Phase:** BOOT-003 ✅ COMPLETE (2026-08-14)
+**Previous Phase:** BOOT-004 ✅ COMPLETE (2026-08-14)
+
+---
+
+## BOOT-004 Final Report
+
+### What Was Completed
+
+**BOOT-004: ExecutionEngine Contract**
+
+Established the Runtime ↔ Engine boundary and proved engine replaceability:
+
+1. **Engine Contract (1 public interface)**
+   - `AgentExecutionEngine` — Public extension contract for pluggable engines
+   - Minimal contract: `execute(AgentDefinition, AgentRequest) → AgentResult`
+   - Execution-neutral Javadoc (no ReAct/Model/Tool specifics in contract)
+
+2. **Runtime Implementation (1 class)**
+   - `DefaultAgentRuntime` — Delegates to AgentExecutionEngine
+   - Package-private (kernel internal)
+   - Simple delegation pattern
+
+3. **Engine Replaceability Proven**
+   - 3 test engines implemented:
+     - `FakeExecutionEngine` — Returns fake response
+     - `EchoExecutionEngine` — Echoes user message
+     - `UpperCaseExecutionEngine` — Converts to uppercase
+   - Same runtime, different engines → different behaviors
+   - No runtime modification required to change execution strategy
+
+4. **Call Chain Verified**
+   ```java
+   AgentRuntime runtime = new DefaultAgentRuntime(engine);
+   AgentResult result = runtime.execute(definition, request);
+   // Runtime → Engine → Result ✅
+   ```
+
+5. **Boundary Clarity**
+   - AgentRuntime = Kernel Internal Contract (package-private)
+   - AgentExecutionEngine = Public Extension Contract (public)
+   - Engine implementations are replaceable without runtime changes
+
+### Key Decisions
+
+1. **AgentRuntime remains package-private**
+   - Reason: Engine in same package can access
+   - Kernel internal contract, not user-facing API
+   - Visibility determined by real usage scenarios
+
+2. **Minimal Engine Contract**
+   - Only `execute()` method
+   - No `name()` — no real consumer exists yet
+   - No `capabilities()` — only one engine type currently
+   - No `EngineContext` / `EngineResult` — direct parameters sufficient
+   - No `AgentExecutionException` hierarchy — runtime propagates exceptions as-is
+
+3. **Execution-neutral contract description**
+   - Javadoc doesn't mention ReAct / Model / Tool
+   - ReAct is one future implementation, not the contract definition
+   - Tool Runtime/Governance boundary reserved for architecture docs
+
+4. **Replaceability proven with 3 engines**
+   - Not just one Fake claiming "replaceable"
+   - Three different behaviors with same runtime
+   - Test explicitly verifies: change engine → change behavior, no runtime change
+
+5. **No real implementation yet**
+   - No Native ReAct
+   - No Model integration
+   - No Tool calling
+   - BOOT-004 only defines and verifies the contract
+
+### Verification Results
+
+All Acceptance Criteria met:
+
+- ✅ AgentExecutionEngine contract defined (public)
+- ✅ AgentRuntime remains package-private
+- ✅ DefaultAgentRuntime delegates to Engine
+- ✅ Runtime → Engine → Result call chain works
+- ✅ Engine replaceability proven (3 different engines)
+- ✅ No name() / capabilities() / EngineContext / EngineResult
+- ✅ No real ReAct implementation
+- ✅ Tests: 27/27 passed (21 BOOT-002/003 + 6 BOOT-004)
+- ✅ ./mvnw clean verify passes (3.8s)
+
+### Code Statistics
+
+- Production code: 2 files, ~50 lines
+- Test code: 5 files, ~150 lines
+- Total: 7 files, ~200 lines
+- Build time: 3.8 seconds
+- Test results: 27/27 passed
+
+### Architecture Impact
+
+**Established Runtime ↔ Engine Boundary:**
+
+```
+AgentRuntime (Kernel Internal)
+  ↓ delegates to
+AgentExecutionEngine (Public Extension Contract)
+  ↓ implementations
+FakeExecutionEngine / EchoExecutionEngine / UpperCaseExecutionEngine
+```
+
+**Boundary ensures:**
+- Engine handles "how agent executes"
+- Runtime handles "what execution means" (future: Session/Policy/Evidence)
+- Engines are pluggable and replaceable
+
+### What Was NOT Done (Non-Goals)
+
+As planned, explicitly deferred:
+
+❌ Native ReAct implementation → BOOT-005+
+❌ Model integration (Spring AI) → BOOT-005+
+❌ Tool calling → Future
+❌ Engine name() / capabilities() → Wait for multiple real engines
+❌ EngineContext / EngineResult → Current signature sufficient
+❌ Exception hierarchy → Wait for real failure semantics
+❌ Session/State management → Future
+❌ Budget/Policy/Evidence → Future
+❌ Spring integration → Future
 
 ---
 
