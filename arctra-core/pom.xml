@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>cn.bitcss.arctra</groupId>
+        <artifactId>arctra-parent</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>arctra-core</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Arctra :: Core</name>
+    <description>Core domain models and runtime contracts - Pure Java, no Spring</description>
+
+    <dependencies>
+        <!-- No compile dependencies - Pure Java -->
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Maven Enforcer: Ensure core remains Pure Java -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-no-spring-in-core</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <searchTransitive>true</searchTransitive>
+                                    <excludes>
+                                        <!-- Core must not depend on Spring -->
+                                        <exclude>org.springframework:*:*:*:compile</exclude>
+                                        <exclude>org.springframework.boot:*:*:*:compile</exclude>
+                                        <exclude>org.springframework.ai:*:*:*:compile</exclude>
+
+                                        <!-- Core must not depend on concrete infrastructure -->
+                                        <exclude>org.elasticsearch.client:*:*:*:compile</exclude>
+                                        <exclude>redis.clients:*:*:*:compile</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

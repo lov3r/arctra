@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>cn.bitcss.arctra</groupId>
+        <artifactId>arctra-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../..</relativePath>
+    </parent>
+
+    <artifactId>knowledge-assistant</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Arctra :: Examples :: Knowledge Assistant</name>
+    <description>Knowledge Assistant example - V1 vertical slice</description>
+
+    <dependencies>
+        <!-- Arctra Spring Boot Starter -->
+        <dependency>
+            <groupId>cn.bitcss.arctra</groupId>
+            <artifactId>arctra-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- Spring Boot Starter Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

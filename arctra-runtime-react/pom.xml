@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>cn.bitcss.arctra</groupId>
+        <artifactId>arctra-parent</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>arctra-runtime-react</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Arctra :: Runtime :: ReAct</name>
+    <description>Native ReAct agent runtime implementation</description>
+
+    <dependencies>
+        <!-- Core dependency -->
+        <dependency>
+            <groupId>cn.bitcss.arctra</groupId>
+            <artifactId>arctra-core</artifactId>
+        </dependency>
+
+        <!-- BOOT-001: No Spring AI yet - will be added in BOOT-002 -->
+    </dependencies>
+
+</project>
