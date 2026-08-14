@@ -125,7 +125,9 @@ See `docs/ARCHITECTURE-V7.md` for details.
 
 ## License
 
-TBD
+Licensed under the [Apache License 2.0](LICENSE).
+
+Copyright 2026 lov3r and Arctra contributors.
 
 ---
 
