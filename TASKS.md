@@ -86,7 +86,7 @@ Claude 先输出：
 
 ## BOOT-002 --- Agent Kernel Domain Skeleton
 
-状态：READY
+状态：DONE ✅
 
 只有 BOOT-001 DONE 后才能开始。
 
@@ -104,7 +104,7 @@ Claude 先输出：
 
 ## BOOT-003 --- AgentClient 最小调用闭环
 
-状态：BACKLOG
+状态：READY
 
 目标：使用 Fake Model 跑通最小调用路径，不引入 Tool/RAG。
 

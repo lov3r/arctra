@@ -168,6 +168,7 @@ V1 核心：
     语义。
 -   禁止持久化模型私有 Chain-of-Thought；只保存业务需要的结构化
     Evidence、Decision、Execution Record 和允许的诊断信息。
+-   每个类文件必须包含 `@author lov3r` Javadoc 标签。
 
 ## 九、Definition of Done
 

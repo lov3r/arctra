@@ -4,9 +4,89 @@
 
 ---
 
-## Current Phase: BOOT-002 (READY)
+## Current Phase: BOOT-003 (READY)
 
-**Previous Phase:** BOOT-001 ✅ COMPLETE (2026-08-14)
+**Previous Phase:** BOOT-002 ✅ COMPLETE (2026-08-14)
+
+---
+
+## BOOT-002 Final Report
+
+### What Was Completed
+
+**BOOT-002: Agent Kernel Domain Skeleton**
+
+Created the minimal domain models needed for AgentClient.call() in BOOT-003:
+
+1. **Domain Models (3 classes)**
+   - `AgentDefinition` — Defines agent identity and purpose
+   - `AgentRequest` — Stateless, single-turn request
+   - `AgentResult` — Execution result (not "response" — emphasizes runtime semantics)
+
+2. **Package Structure**
+   - Package: `cn.bitcss.arctra.agent` (capability-oriented, not module-scoped)
+   - All models are immutable Java records
+   - All models are public (required by AgentClient API)
+
+3. **Invariant Protection**
+   - AgentDefinition: name cannot be blank
+   - AgentRequest: userMessage cannot be blank
+   - AgentResult: content cannot be null (but can be empty string)
+
+4. **Test Coverage**
+   - Unit tests: 12 tests covering all constructors and invariants
+   - Architecture tests: 4 rules protecting core dependencies
+   - Test coverage: 100% for domain models
+
+5. **Architecture Protection**
+   - ArchUnit rules: Core cannot depend on Spring, JPA, Elasticsearch, Redis
+   - Maven Enforcer: Core banned dependencies enforcement
+   - Test dependencies added to arctra-core POM
+
+### Key Decisions
+
+1. **Simplified scope** — Removed engine/engineConfig/sessionId/executionId
+   - Engine selection deferred to ExecutionEngine Contract phase
+   - Session management deferred (current is stateless)
+   - Execution tracking deferred (no Execution domain yet)
+
+2. **AgentResult vs AgentResponse** — Chose "Result" for runtime semantics
+   - Emphasizes execution outcome, not transport layer
+   - Aligns with "Engineering Runtime/Harness" positioning
+
+3. **Package naming** — Used `cn.bitcss.arctra.agent`, not `cn.bitcss.arctra.core.agent`
+   - Capability-oriented, not module-scoped
+   - Maven module name doesn't leak into Java namespace
+
+4. **No DDD ceremony** — Simple immutable records, not full DDD
+   - Complexity doesn't justify Aggregate/Repository/Domain Service
+   - Follows DDD principles (immutability, invariants) without full patterns
+
+5. **Author tags** — Added `@author lov3r` to all classes
+   - Updated CLAUDE.md to enforce this convention
+
+### Verification Results
+
+All Acceptance Criteria met:
+
+- ✅ AgentDefinition / AgentRequest / AgentResult created
+- ✅ All models are immutable records
+- ✅ Invariants protected (illegal input throws IllegalArgumentException)
+- ✅ Unit tests: 16 tests, 100% pass
+- ✅ Architecture tests: 4 rules, 100% pass
+- ✅ Package: cn.bitcss.arctra.agent (not core.agent)
+- ✅ ./mvnw clean verify passes (3.6s)
+- ✅ No premature abstractions (engine/session/execution/budget)
+- ✅ All classes are public (AgentClient requires them)
+- ✅ Code follows Spotless formatting
+
+### Code Statistics
+
+- Production code: 3 files, ~50 lines
+- Test code: 4 files, ~130 lines
+- Total: 7 files, ~180 lines
+- Build time: 3.6 seconds
+- Test results: 16/16 passed
 
 ---
 
