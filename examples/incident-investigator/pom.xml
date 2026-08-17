@@ -25,10 +25,24 @@
             <artifactId>arctra-spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- Arctra Runtime ReAct (for SpringAiToolCallingEngine) -->
+        <dependency>
+            <groupId>cn.bitcss.arctra</groupId>
+            <artifactId>arctra-runtime-react</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Spring AI Model (for ToolCallback) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-model</artifactId>
+        </dependency>
+
+        <!-- Spring AI OpenAI (for E2E test with real ChatModel) -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-openai</artifactId>
+            <scope>test</scope>
         </dependency>
 
         <!-- Spring Boot Starter Test -->
