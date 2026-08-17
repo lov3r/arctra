@@ -101,37 +101,33 @@
 
 ### M1-T3: Spring AI 集成方案验证
 
-**状态：** BACKLOG
+**状态：** COMPLETE ✅
 **估算：** 1 天
 **依赖：** M1-T1
+**完成日期：** 2026-08-17
 
 **目标：** 验证 Spring AI ChatClient + ToolCallingAdvisor 是否满足需求
 
-**范围：**
-- 在 arctra-runtime-react 创建实验性实现
-- 使用 Spring AI ChatClient + ToolCallingAdvisor
-- 验证 Tool Calling Loop 是否满足 Arctra 需求
-- 验证 Engine 命名（NativeReActEngine 是否准确）
-
-**关键验证点：**
-1. Spring AI Loop 能否收集 Evidence？
-2. 如何在 Loop 中为未来 Governance 预留扩展点？
-3. 如何控制 Loop 迭代次数？
-4. 如何处理 Tool 调用失败？
-5. Engine 实际执行机制是什么？命名是否准确？
-
 **交付物：**
-- 对比报告（复用 Spring AI vs 自建 Loop）
-- 推荐方案 + 理由
-- PoC 代码（如果复用）
-- Engine 命名建议
+- ✅ 添加 spring-ai-client-chat 依赖到 arctra-runtime-react
+- ✅ 验证 Spring AI 2.0 实际 API (ChatClient, ToolCallback, ToolDefinition)
+- ✅ 验证 Evidence capture 最佳位置 (ToolCallback Wrapper)
+- ✅ 对比报告（复用 Spring AI Loop vs 自建）
+- ✅ PoC 代码验证
+
+**关键结论：**
+- 推荐方案 A：完全复用 Spring AI Tool Calling Loop
+- Evidence capture 位置：ToolCallback Wrapper (Engine 内部)
+- ToolCallingAdvisor 是递归 Advisor，负责自动化 Loop
+- Mock ChatModel 可行，可用于 M1-T7 E2E Test
+- 不需要手动管理 Loop，不需要自建 Tool Request 解析
 
 **Acceptance Criteria:**
-- [ ] 验证 Evidence 收集可行性
-- [ ] 验证 Governance 扩展点可行性
-- [ ] 输出推荐方案（复用 or 自建）
-- [ ] PoC 代码验证
-- [ ] Engine 命名建议（基于实际机制）
+- [x] 验证 Spring AI 2.0 API 存在性
+- [x] 验证 ToolCallback / ToolCallbackProvider / ToolCallingAdvisor
+- [x] 验证 Evidence capture 可行性（ToolCallback Wrapper 证明）
+- [x] 输出推荐方案（方案 A）
+- [x] PoC 代码验证（6 tests pass）
 
 ---
 

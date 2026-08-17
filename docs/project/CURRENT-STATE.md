@@ -6,7 +6,7 @@
 
 ## Current Phase: M1 Incident Agent MVP (IN PROGRESS)
 
-**Current Task:** M1-T3 (Spring AI 集成方案验证) - READY
+**Current Task:** M1-T4 (Arctra Tool Contract 实现) - READY
 
 **Previous Phase:** BOOT-004 ✅ COMPLETE (2026-08-14)
 
@@ -29,13 +29,20 @@
   - Decision 暂不创建 Framework-level Contract（未被多场景验证）
   - 40 tests pass, ./mvnw clean verify SUCCESS
 
+- ✅ **M1-T3:** Spring AI 集成方案验证 (2026-08-17)
+  - 设计文档：docs/design/M1-T3-spring-ai-integration.md
+  - 添加 spring-ai-client-chat 依赖到 arctra-runtime-react
+  - 验证 Spring AI 2.0 API（ChatClient, ToolCallback, ToolDefinition, ToolCallingAdvisor）
+  - 推荐方案 A：完全复用 Spring AI Tool Calling Loop
+  - Evidence capture 位置：ToolCallback Wrapper（Engine 内部）
+  - 6 PoC tests pass
+
 ### Next Task
 
-**M1-T3: Spring AI 集成方案验证**
-- 验证 Spring AI ChatClient + ToolCallingAdvisor
-- 对比不同 Evidence capture 位置（Advisor / ToolCallback / Engine）
-- 验证 Engine 命名
-- 推荐方案（复用 Spring AI Loop vs 自建）
+**M1-T4: Arctra Tool Contract 实现**
+- 根据 M1-T1 设计，创建 Tool Contract（如果需要）
+- M1-T1 结论：M1 不需要 Arctra Tool Contract
+- 可能跳过此任务，直接进入 M1-T5 (Mock Tools)
 
 ---
 

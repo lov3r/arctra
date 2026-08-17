@@ -24,7 +24,23 @@
             <artifactId>arctra-core</artifactId>
         </dependency>
 
-        <!-- BOOT-001: No Spring AI yet - will be added in BOOT-002 -->
+        <!-- Spring AI: ChatClient (M1-T3 PoC and M1-T6 Engine) -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-client-chat</artifactId>
+        </dependency>
+
+        <!-- Test dependencies -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>
