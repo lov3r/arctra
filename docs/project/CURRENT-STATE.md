@@ -4,9 +4,30 @@
 
 ---
 
-## Current Phase: M1 Incident Agent MVP (IN PLANNING)
+## Current Phase: M1 Incident Agent MVP (IN PROGRESS)
+
+**Current Task:** M1-T2 (Evidence 领域模型) - READY
 
 **Previous Phase:** BOOT-004 ✅ COMPLETE (2026-08-14)
+
+---
+
+## M1 Progress
+
+### Completed Tasks
+
+- ✅ **M1-T1:** Arctra ↔ Spring AI Tool 边界设计 (2026-08-14)
+  - 设计文档：docs/design/M1-T1-tool-boundary.md
+  - 结论：M1 直接使用 Spring AI ToolCallback，不创建 Arctra Tool Contract
+  - Evidence 收集位置延后到 M1-T3 验证
+  - 未来 Governance 位于独立层（非 Engine 实现）
+
+### Next Task
+
+**M1-T2: Evidence 领域模型**
+- 创建 Evidence 模型（Framework 通用语义）
+- 决策 AgentResult 如何携带 Evidence
+- 明确 Incident 场景输出与 Framework 模型的边界
 
 ---
 

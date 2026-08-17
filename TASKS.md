@@ -33,22 +33,31 @@
 
 ### M1-T1: Arctra ↔ Spring AI Tool 边界设计
 
-**状态：** READY
+**状态：** COMPLETE ✅
 **估算：** 0.5 天
 **依赖：** 无
+**完成日期：** 2026-08-14
 
 **目标：** 明确 Arctra Tool Contract 与 Spring AI ToolCallback 的边界
 
 **交付物：**
-- 设计文档（边界、职责、适配方案）
-- arctra-core 需要的类型清单
-- arctra-runtime-react 适配器职责
+- ✅ 设计文档（docs/design/M1-T1-tool-boundary.md）
+- ✅ 明确 M1 不创建 Arctra Tool Contract
+- ✅ 使用 Spring AI 2.0 术语（ToolCallback / ToolCallbackProvider / ToolCallingAdvisor）
+- ✅ 明确未来 Governance 不属于 Engine 实现
+
+**关键结论：**
+- M1 直接使用 Spring AI ToolCallback，不创建 Arctra Tool Contract
+- Evidence 收集位置延后到 M1-T3 验证（Advisor / ToolCallback Wrapper / Engine）
+- 未来 Governance 位于独立层（Engine 与 Tool 之间），不是每个 Engine 自己实现
+- Mock Tools 当前不依赖 arctra-core（仅作为 M1 事实，非长期规则）
 
 **Acceptance Criteria:**
-- [ ] 输出设计文档
-- [ ] 明确 Arctra 增加的语义（不阻碍未来 Governance）
-- [ ] 明确适配层职责
-- [ ] 不提前创建 Permission/Risk/Audit 模型
+- [x] 输出设计文档
+- [x] 使用 Spring AI 2.0 当前术语
+- [x] 明确 Arctra 增加的语义（Evidence 待验证位置）
+- [x] 明确未来 Governance 架构位置（独立层，非 Engine）
+- [x] 不提前创建 Permission/Risk/Audit 模型
 
 ---
 
