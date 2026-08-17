@@ -44,21 +44,22 @@ class IncidentAgentRealE2ETest {
     var baseUrl = "https://router.ezsub.com/v1";
     var apiKey = "G5ruk5BGffumiEDpVWuPTJO4ywcPHlkXOQW6X6NbR9XDXA0a";
 
+    // Use OpenAiSetup with explicit non-Azure, non-Microsoft-Foundry settings
     var openAiClient = OpenAiSetup.setupSyncClient(
-        baseUrl,           // baseUrl
-        null,              // azureEndpoint
+        baseUrl,           // baseUrl (explicit, non-null)
+        "",                // azureEndpoint (empty string, not null)
         null,              // credential (will use apiKey)
-        apiKey,            // apiKey
+        apiKey,            // apiKey (explicit)
         null,              // azureApiVersion
-        null,              // azureDeploymentName
-        false,             // isAzure
-        false,             // useMicrosoftFoundry
+        "",                // azureDeploymentName (empty string, not null)
+        false,             // isAzure (explicit false)
+        false,             // useMicrosoftFoundry (explicit false)
         null,              // userAgent
-        java.time.Duration.ofSeconds(60), // timeout
+        Duration.ofSeconds(60), // timeout
         3,                 // maxRetries
         null,              // proxy
         null,              // headers
-        io.micrometer.observation.ObservationRegistry.NOOP, // observationRegistry
+        ObservationRegistry.NOOP, // observationRegistry
         null,              // meterRegistry
         List.of()          // httpClientBuilderCustomizers
     );
