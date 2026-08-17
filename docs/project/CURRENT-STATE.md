@@ -4,9 +4,90 @@
 
 ---
 
-## Current Phase: BOOT-005 (READY)
+## Current Phase: M1 Incident Agent MVP (IN PLANNING)
 
 **Previous Phase:** BOOT-004 ✅ COMPLETE (2026-08-14)
+
+---
+
+## M1 Planning Summary
+
+### Objective
+
+Complete the first real Vertical Slice: from Incident Question to Evidence-based Diagnosis, validating that Arctra's core architecture works in real scenarios.
+
+### Scenario
+
+**Production 500 Error Spike Analysis**
+
+Input: "生产环境从 16:20 开始出现大量 500 错误，请分析原因"
+
+Expected Output:
+```
+Root Cause Analysis:
+  Database schema migration missing for user_status field
+
+Evidence:
+  1. [QueryLogsTool] 16:20 开始出现 SQLException: Unknown column 'user_status'
+  2. [GetDeploymentTool] 16:18 部署 v1.2.3，代码新增 user_status 字段
+
+Diagnosis:
+  Schema drift between application code and database
+
+Recommended Actions (requires approval):
+  - Option 1: Execute schema migration (requires DBA review)
+  - Option 2: Rollback to v1.2.2 (requires impact assessment)
+```
+
+### M1 Tasks
+
+1. **M1-T1:** Arctra ↔ Spring AI Tool 边界设计 (0.5d) - READY
+2. **M1-T2:** Evidence 领域模型 (0.5d) - READY
+3. **M1-T3:** Spring AI 集成方案验证 (1d) - BACKLOG
+4. **M1-T4:** Arctra Tool Contract 实现 (0.5d) - BACKLOG
+5. **M1-T5:** Mock Tools 实现 (0.5d) - BACKLOG
+6. **M1-T6:** Spring AI-based Engine 实现 (2d) - BACKLOG
+7. **M1-T7:** Incident Scenario E2E Test (1d) - BACKLOG
+8. **M1-T8:** Documentation, Dogfooding 和抽象清理 (1d) - BACKLOG
+
+**Total Estimate:** 6.5 days (1.5~2 weeks with buffer)
+
+### Key Constraints
+
+1. **arctra-core 保持纯 Java**
+   - 无 Spring AI 依赖
+   - 无 Spring Framework 依赖
+
+2. **Spring AI 集成在 arctra-runtime-react**
+   - Model 集成
+   - Tool Calling Loop（优先复用 Spring AI 能力）
+
+3. **不提前创建未来抽象**
+   - 不提前创建 Permission/Risk/Audit
+   - 不提前把 Policy/HITL 塞进核心模型
+   - Mock Tools 放在 examples 或 test fixtures
+
+4. **Evidence 是 Framework 通用语义**
+   - 明确区分 Framework 模型和 Incident 场景输出
+   - Decision/Diagnosis/Recommendation 归属待确定
+
+5. **无生产 DDL 执行**
+   - 只输出诊断和需审批的操作建议
+   - 为未来 Policy/HITL 预留正确边界
+
+### M1 Non-Goals
+
+明确不在 M1 实现：
+- AgentClient API
+- Spring Boot Starter
+- Tool Permission/Policy/Governance
+- Tool Sandbox/Isolation
+- Session 管理
+- Checkpoint/Resume
+- HITL 实现
+- 真实 Tool 集成
+- RAG
+- Multi-Agent
 
 ---
 
