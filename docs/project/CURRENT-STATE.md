@@ -1,12 +1,12 @@
 # Current State
 
-**Last Updated:** 2026-08-14
+**Last Updated:** 2026-08-17
 
 ---
 
 ## Current Phase: M1 Incident Agent MVP (IN PROGRESS)
 
-**Current Task:** M1-T2 (Evidence 领域模型) - READY
+**Current Task:** M1-T3 (Spring AI 集成方案验证) - READY
 
 **Previous Phase:** BOOT-004 ✅ COMPLETE (2026-08-14)
 
@@ -22,12 +22,20 @@
   - Evidence 收集位置延后到 M1-T3 验证
   - 未来 Governance 位于独立层（非 Engine 实现）
 
+- ✅ **M1-T2:** Evidence 领域模型 (2026-08-17)
+  - Evidence record 创建（arctra-core/evidence）
+  - AgentResult 扩展（添加 evidences 字段）
+  - Evidence 是 Framework 通用语义（不包含 private reasoning）
+  - Decision 暂不创建 Framework-level Contract（未被多场景验证）
+  - 40 tests pass, ./mvnw clean verify SUCCESS
+
 ### Next Task
 
-**M1-T2: Evidence 领域模型**
-- 创建 Evidence 模型（Framework 通用语义）
-- 决策 AgentResult 如何携带 Evidence
-- 明确 Incident 场景输出与 Framework 模型的边界
+**M1-T3: Spring AI 集成方案验证**
+- 验证 Spring AI ChatClient + ToolCallingAdvisor
+- 对比不同 Evidence capture 位置（Advisor / ToolCallback / Engine）
+- 验证 Engine 命名
+- 推荐方案（复用 Spring AI Loop vs 自建）
 
 ---
 

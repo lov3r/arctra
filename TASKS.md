@@ -63,41 +63,39 @@
 
 ### M1-T2: Evidence 领域模型
 
-**状态：** READY
+**状态：** COMPLETE ✅
 **估算：** 0.5 天
 **依赖：** 无
+**完成日期：** 2026-08-17
 
 **目标：** 创建 Evidence 模型（Framework 通用语义）
 
-**范围：**
-- 在 arctra-core 创建 Evidence 模型
-  - source（证据来源）
-  - content（证据内容）
-  - timestamp
-  
-- 明确 Evidence 是 Framework 通用语义，不是 Incident 专属
-
-- 决策 AgentResult 如何携带 Evidence：
-  - 扩展 AgentResult？
-  - 新增字段还是重构结构？
-  - Evidence 对所有 Engine 都适用吗？
-
-- 明确什么是 Incident 场景输出，什么是 Framework 通用模型：
-  - Decision/Diagnosis/Recommendation 是否属于 Framework？
-  - riskLevel/requiresApproval 是否属于 Policy 语义？
-
 **交付物：**
-- Evidence 模型（arctra-core）
-- AgentResult 调整方案（可能扩展，可能不扩展）
-- 单元测试
+- ✅ Evidence record（arctra-core/evidence）
+- ✅ AgentResult 扩展（添加 evidences 字段）
+- ✅ 单元测试（EvidenceTest + AgentResultTest）
+- ✅ 向后兼容（原有 new AgentResult(content) 调用继续工作）
+
+**关键决策：**
+- Evidence 是 Framework 通用语义（适用所有 Agent 场景）
+- Evidence 只包含可观察、可记录、可引用的执行事实（Tool Result、Retrieval Result、External System Result、Human Input、结构化 Model Output）
+- Evidence 不包含 private model reasoning / chain-of-thought
+- Evidence.source 当前使用 String（不冻结为正式 protocol）
+- Evidence 不包含 timestamp（M1 不需要，等真实需求）
+- Decision 暂不创建 Framework-level Contract（只有 Incident 一个消费者，通用 Contract 未被多场景验证）
+- diagnosis/recommendations 属于 Incident 场景输出（不在 arctra-core）
+- riskLevel/requiresApproval 延后到 Policy/HITL
 
 **Acceptance Criteria:**
-- [ ] Evidence 是不可变 Record
-- [ ] Evidence 是 Framework 通用语义
-- [ ] 明确 Incident 场景输出与 Framework 模型的边界
-- [ ] 不提前把 Policy/HITL 语义塞进核心模型
-- [ ] 单元测试覆盖
-- [ ] 现有测试适配
+- [x] Evidence record 创建（source + content）
+- [x] Evidence 不包含 timestamp
+- [x] Evidence 不包含 private reasoning
+- [x] Evidence invariants 测试通过
+- [x] AgentResult 包含 evidences 字段
+- [x] AgentResult 防御性拷贝
+- [x] AgentResult 向后兼容
+- [x] 单元测试：40 tests pass
+- [x] ./mvnw clean verify 通过
 
 ---
 
