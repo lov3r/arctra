@@ -58,9 +58,9 @@
 - ✅ **M1-T7:** Incident Scenario E2E Test (2026-08-17)
   - FakeChatModelWithToolCalling 创建（简单 fake model）
   - IncidentAgentE2EStructureTest 创建（组件集成验证 - 自动运行）
-  - IncidentAgentRealE2ETest 创建（真实 OpenAI E2E - @Disabled）
-  - README 文档（说明两种测试方式）
-  - 11 tests pass (10 auto + 1 manual-disabled), ./mvnw clean verify SUCCESS
+  - README 文档（说明测试策略和 Real E2E 限制）
+  - 10 tests pass (all auto), ./mvnw clean verify SUCCESS
+  - Real E2E blocked by Spring AI 2.0 API instability (defer to M2)
 
 ---
 

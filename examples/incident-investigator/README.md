@@ -4,7 +4,7 @@ This example demonstrates the complete Incident Agent vertical slice with tool c
 
 ## Tests
 
-### 1. Structure Test (Always Runs)
+### Structure Test (Always Runs)
 
 **IncidentAgentE2EStructureTest** validates that all components can be correctly assembled:
 - SpringAiToolCallingEngine + Tools integration
@@ -15,41 +15,36 @@ This example demonstrates the complete Incident Agent vertical slice with tool c
 ./mvnw test -pl examples/incident-investigator
 ```
 
-**Note:** The fake ChatModel returns a simple response without actual tool calling. For real LLM-driven tool calling, see the Real E2E test below.
+**Note:** The fake ChatModel returns a simple response without actual tool calling. This validates component integration but not complete LLM-driven behavior.
 
-### 2. Real E2E Test (Manual - Requires API Key)
+### Real E2E Test Status
 
-**IncidentAgentRealE2ETest** uses a real ChatModel to validate complete tool calling with LLM reasoning.
+A real E2E test with actual OpenAI API integration is planned but currently blocked by Spring AI 2.0 client configuration complexity.
 
-**Requirements:**
-- Network access
-- OpenAI-compatible API (via proxy)
+**Challenges:**
+- Spring AI 2.0's OpenAI client setup requires complex credential/authentication configuration
+- `OpenAiSetup.setupSyncClient()` incorrectly detects Microsoft Foundry/Azure modes
+- Direct OpenAI client builder APIs are not stable in current version
 
-**To run:**
+**Workaround for manual testing:**
+- Use the Structure Test to validate component integration
+- For real LLM behavior testing, create a Spring Boot application with:
+  - `spring-ai-starter-openai` dependency
+  - Configuration in `application.yaml`:
+    ```yaml
+    spring:
+      ai:
+        openai:
+          base-url: https://router.ezsub.com/v1
+          api-key: <your-key>
+          model: gpt-5.4
+    ```
+  - Auto-configured `ChatModel` bean
 
-1. **Remove @Disabled annotation** from `IncidentAgentRealE2ETest.java`
-
-2. **Run the test:**
-   ```bash
-   ./mvnw test -pl examples/incident-investigator -Dtest=IncidentAgentRealE2ETest
-   ```
-
-**Configuration:**
-- Base URL: `https://router.ezsub.com/v1`
-- API Key: (already configured in test)
-- Model: `gpt-5.4`
-
-### Expected Real E2E Behavior
-
-The Agent should:
-1. Call `queryLogs` → discover SQLException with 'user_status' column
-2. Call `getDeployment` → discover v1.2.3 deployment at 16:18
-3. Analyze correlation → diagnose schema drift as root cause
-
-The test verifies:
-- Response contains key analysis (user_status, deployment info, schema-related issue)
-- Evidences captured (2+ tool invocations)
-- Evidence content matches mock data
+**M2 Plan:**
+- Wait for Spring AI 2.0 API stabilization
+- Or create a dedicated integration test module with Spring Boot context
+- Or use alternative ChatModel implementation for testing
 
 ## Project Structure
 
@@ -64,13 +59,12 @@ src/
     │   ├── QueryLogsToolTest.java            (Unit tests)
     │   └── GetDeploymentToolTest.java
     ├── FakeChatModelWithToolCalling.java    (Fake for structure test)
-    ├── IncidentAgentE2EStructureTest.java   (Always runs)
-    └── IncidentAgentRealE2ETest.java        (Manual - requires API)
+    └── IncidentAgentE2EStructureTest.java   (Always runs - 4 tests)
 ```
 
 ## M1 Vertical Slice
 
-This example validates the complete M1 Incident Agent MVP:
+This example validates the M1 Incident Agent MVP component integration:
 
 ```
 User Question
@@ -79,7 +73,7 @@ AgentRequest
     ↓
 SpringAiToolCallingEngine
     ↓
-Spring AI Tool Calling Loop
+Spring AI Tool Calling Loop (delegated to ChatModel)
     ↓
 Tools (QueryLogsTool, GetDeploymentTool)
     ↓
@@ -87,3 +81,15 @@ Evidence Capture (EvidenceCapturingToolCallback)
     ↓
 AgentResult(content, evidences)
 ```
+
+**Validated by Structure Test:**
+- ✅ All components assemble correctly
+- ✅ Engine executes without crashes
+- ✅ Tools work and return expected data
+
+**Not validated in M1:**
+- ❌ Real LLM-driven tool calling behavior
+- ❌ Evidence capture from actual tool invocations
+- ❌ Complete analysis with real reasoning
+
+**Reason:** Spring AI 2.0 client configuration API instability. Will be addressed in M2 with proper integration testing setup.

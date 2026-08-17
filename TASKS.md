@@ -260,8 +260,7 @@
 **交付物：**
 - ✅ FakeChatModelWithToolCalling（简单 fake model）
 - ✅ IncidentAgentE2EStructureTest（组件集成验证 - 4 tests）
-- ✅ IncidentAgentRealE2ETest（真实 OpenAI E2E - @Disabled）
-- ✅ README 文档（说明两种测试方式）
+- ✅ README 文档（说明测试策略和限制）
 
 **关键设计：**
 
@@ -272,20 +271,18 @@
    - 验证：Tools 返回预期 mock 数据
    - 不依赖外部 API，可在 CI 中自动运行
 
-2. **Real E2E Test（手动启用）**
-   - 使用真实 OpenAI ChatModel（通过国内代理）
-   - 配置：base-url = https://router.ezsub.com/v1
-   - 配置：model = gpt-5.4
-   - 验证：真实 LLM 驱动的 tool calling
-   - 验证：Evidence 被正确捕获
-   - 验证：Agent 输出包含 schema drift 分析
-   - @Disabled by default（需手动移除注解）
+2. **Real E2E Test 状态**
+   - 计划：使用真实 OpenAI ChatModel 验证完整 tool calling
+   - 阻塞：Spring AI 2.0 OpenAI client 配置 API 不稳定
+   - 问题：OpenAiSetup.setupSyncClient() 错误检测 Azure/Microsoft Foundry
+   - 问题：直接 OpenAI client builder API 不在当前依赖中
+   - 决策：M1 只验证组件集成，完整行为验证延后到 M2
 
 3. **FakeChatModel 设计决策**
    - 不模拟完整 Spring AI Tool Calling Loop（过于复杂）
    - 返回简单分析响应（无 tool calls）
    - 目的：验证组件集成，不是完整行为
-   - 完整行为验证：通过 Real E2E Test
+   - 完整行为验证：延后到 M2（Spring AI API 稳定后）
 
 **Structure Test 验证（4 tests）：**
 - ✅ should_execute_engine_with_fake_model（Engine 执行不崩溃）
@@ -293,28 +290,34 @@
 - ✅ should_construct_agent_definition（AgentDefinition 构造）
 - ✅ should_construct_agent_request（AgentRequest 构造）
 
-**Real E2E Test 验证（1 test - manual）：**
-- ✅ should_analyze_incident_with_real_openai（完整 tool calling + evidence capture）
-
 **README 说明：**
 - Structure Test：始终运行，验证组件集成
-- Real E2E Test：手动启用，验证真实 tool calling
-- 配置说明（base-url, api-key, model）
-- 预期行为说明
+- Real E2E Test：计划中，M1 因 API 不稳定而阻塞
+- M2 计划：Spring AI 稳定后或创建 Spring Boot 集成测试模块
+
+**M1 验证范围：**
+- ✅ 组件正确集成
+- ✅ Engine 不崩溃
+- ✅ Tools 正常工作
+- ❌ 真实 LLM tool calling（延后 M2）
+- ❌ Evidence 从实际调用中捕获（延后 M2）
 
 **Acceptance Criteria:**
 - [x] 创建 FakeChatModelWithToolCalling
 - [x] 创建 IncidentAgentE2EStructureTest（自动运行）
-- [x] 创建 IncidentAgentRealE2ETest（@Disabled）
 - [x] 验证 Engine + Tools 集成
 - [x] 验证 Tools 返回正确 mock 数据
-- [x] Real E2E 配置真实代理 API
-- [x] 提供 README 说明两种测试方式
-- [x] ./mvnw test -pl examples/incident-investigator 通过（11 tests, 1 skipped）
+- [x] 提供 README 说明测试策略和限制
+- [x] ./mvnw test -pl examples/incident-investigator 通过（10 tests）
 - [x] ./mvnw clean verify 通过（全项目）
 - [x] 不创建 IncidentAnalysis parser
 - [x] 不实现 Decision / RiskLevel
 - [x] 不实现 HITL / Governance
+
+**M2 后续工作：**
+- [ ] 等待 Spring AI 2.0 API 稳定
+- [ ] 或创建 Spring Boot 集成测试模块
+- [ ] 或使用替代 ChatModel 实现
 
 ---
 **估算：** 1 天
