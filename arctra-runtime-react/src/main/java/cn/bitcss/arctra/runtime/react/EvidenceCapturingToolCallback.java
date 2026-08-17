@@ -17,16 +17,16 @@ import org.springframework.ai.tool.metadata.ToolMetadata;
  * <p>Transparently proxies all ToolCallback methods to ensure evidence is captured regardless of
  * which call path Spring AI uses.
  *
- * <p>Package-private: only used by SpringAiToolCallingEngine.
+ * <p>Public for testing purposes, but primarily intended for internal use by SpringAiToolCallingEngine.
  *
  * @author lov3r
  */
-class EvidenceCapturingToolCallback implements ToolCallback {
+public class EvidenceCapturingToolCallback implements ToolCallback {
 
   private final ToolCallback delegate;
   private final List<Evidence> evidences;
 
-  EvidenceCapturingToolCallback(ToolCallback delegate, List<Evidence> evidences) {
+  public EvidenceCapturingToolCallback(ToolCallback delegate, List<Evidence> evidences) {
     this.delegate = Objects.requireNonNull(delegate, "delegate cannot be null");
     this.evidences = Objects.requireNonNull(evidences, "evidences cannot be null");
   }

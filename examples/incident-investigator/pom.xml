@@ -32,16 +32,10 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Spring AI Model (for ToolCallback) -->
+        <!-- Spring AI OpenAI Model Starter (for test with real ChatModel) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-model</artifactId>
-        </dependency>
-
-        <!-- Spring AI OpenAI (for E2E test with real ChatModel) -->
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-openai</artifactId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
             <scope>test</scope>
         </dependency>
 

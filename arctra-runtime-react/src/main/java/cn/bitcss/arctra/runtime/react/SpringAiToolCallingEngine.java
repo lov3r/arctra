@@ -65,7 +65,7 @@ public class SpringAiToolCallingEngine implements AgentExecutionEngine {
             .prompt()
             .system(systemInstruction)
             .user(request.userMessage())
-            .tools((Object) wrappedTools.toArray(new ToolCallback[0]))
+            .tools(wrappedTools.toArray(new ToolCallback[0]))
             .call()
             .content();
 
