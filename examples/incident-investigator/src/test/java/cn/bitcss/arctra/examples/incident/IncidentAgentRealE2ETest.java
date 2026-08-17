@@ -8,6 +8,8 @@ import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.examples.incident.tools.GetDeploymentTool;
 import cn.bitcss.arctra.examples.incident.tools.QueryLogsTool;
 import cn.bitcss.arctra.runtime.react.SpringAiToolCallingEngine;
+import io.micrometer.observation.ObservationRegistry;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -52,11 +54,11 @@ class IncidentAgentRealE2ETest {
         false,             // isAzure
         false,             // useMicrosoftFoundry
         null,              // userAgent
-        null,              // timeout
-        0,                 // maxRetries
+        java.time.Duration.ofSeconds(60), // timeout
+        3,                 // maxRetries
         null,              // proxy
         null,              // headers
-        null,              // observationRegistry
+        io.micrometer.observation.ObservationRegistry.NOOP, // observationRegistry
         null,              // meterRegistry
         List.of()          // httpClientBuilderCustomizers
     );
