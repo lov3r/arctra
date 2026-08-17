@@ -6,7 +6,7 @@
 
 ## Current Phase: M1 Incident Agent MVP (IN PROGRESS)
 
-**Current Task:** M1-T4 (Arctra Tool Contract 实现) - READY
+**Current Task:** M1-T6 (Spring AI-based Engine 实现) - READY
 
 **Previous Phase:** BOOT-004 ✅ COMPLETE (2026-08-14)
 
@@ -37,12 +37,25 @@
   - Evidence capture 位置：ToolCallback Wrapper（Engine 内部）
   - 6 PoC tests pass
 
+- ✅ **M1-T4:** Arctra Tool Contract 实现 - NOT_NEEDED (2026-08-17)
+  - 决策：M1 不创建 Arctra Tool Contract
+  - 理由：Spring AI ToolCallback 满足 M1 需求，无真实消费者
+  - 设计决策记录在 M1-T1 和 M1-T3 文档中
+
+- ✅ **M1-T5:** Mock Tools 实现 (2026-08-17)
+  - QueryLogsTool + GetDeploymentTool 创建
+  - 放在 examples/incident-investigator/tools
+  - 直接实现 Spring AI ToolCallback
+  - 返回固定 Mock 数据（支持 Incident Scenario）
+  - 6 tests pass, ./mvnw clean verify SUCCESS
+
 ### Next Task
 
-**M1-T4: Arctra Tool Contract 实现**
-- 根据 M1-T1 设计，创建 Tool Contract（如果需要）
-- M1-T1 结论：M1 不需要 Arctra Tool Contract
-- 可能跳过此任务，直接进入 M1-T5 (Mock Tools)
+**M1-T6: Spring AI-based Engine 实现**
+- 创建 SpringAIBasedEngine（implements AgentExecutionEngine）
+- 使用 ChatClient + ToolCallingAdvisor
+- ToolCallback Wrapper 捕获 Evidence
+- 返回 AgentResult(content, evidences)
 
 ---
 

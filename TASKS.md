@@ -133,54 +133,67 @@
 
 ### M1-T4: Arctra Tool Contract 实现
 
-**状态：** BACKLOG
-**估算：** 0.5 天
+**状态：** NOT_NEEDED ✅
+**估算：** 0.5 天（未实施）
 **依赖：** M1-T1
+**决策日期：** 2026-08-17
 
-**目标：** 在 arctra-core 实现 Tool Contract
+**决策：** M1 阶段不创建 Arctra Tool Contract
 
-**范围：**
-- 根据 M1-T1 设计，创建 Tool 相关类型
-- 只要求"不阻碍未来 Governance 接管 Tool Execution"
-- 不提前创建 Permission/Risk/Audit 模型
+**理由：**
+- M1-T1 设计结论：M1 直接使用 Spring AI ToolCallback
+- M1-T3 PoC 验证：Spring AI ToolCallback 满足 M1 需求
+- 当前不存在 Arctra-specific Tool Contract 的真实消费者
+- M1 只有 2 个 Mock Tools，不需要抽象
+- 未来如果需要（Governance / Multi-Engine），可以在真实需求出现时创建
 
 **交付物：**
-- Tool Contract（arctra-core）
-- 单元测试
+- ✅ 设计决策（记录在 M1-T1 和 M1-T3 文档中）
+- ✅ 不创建任何代码（正确决策）
 
 **Acceptance Criteria:**
-- [ ] Tool Contract 定义清晰
-- [ ] 不阻碍未来 Governance 扩展
-- [ ] 不提前创建 Permission/Risk/Audit
-- [ ] 与 Spring AI 边界明确
-- [ ] 单元测试覆盖
+- [x] M1-T1 和 M1-T3 已明确不需要 Arctra Tool Contract
+- [x] 决策轨迹已记录
 
 ---
 
 ### M1-T5: Mock Tools 实现
 
-**状态：** BACKLOG
+**状态：** COMPLETE ✅
 **估算：** 0.5 天
-**依赖：** M1-T4
+**依赖：** M1-T3
+**完成日期：** 2026-08-17
 
 **目标：** 实现 2 个 Mock Tool（Incident Scenario 专属）
 
 **范围：**
 - QueryLogsTool：返回固定 Mock 日志
 - GetDeploymentTool：返回固定 Mock 部署信息
-- 放在 examples/incident-investigator 或测试 fixtures
-- 不放进 arctra-runtime-react 产品代码
+- 放在 examples/incident-investigator
+- 直接实现 Spring AI ToolCallback
 
 **交付物:**
-- QueryLogsTool（examples 或 test）
-- GetDeploymentTool（examples 或 test）
+- ✅ QueryLogsTool
+- ✅ GetDeploymentTool
+- ✅ 单元测试（6 tests pass）
+
+**关键决策：**
+- 直接实现 Spring AI ToolCallback（不创建 Arctra Tool Contract）
+- 放在 examples/incident-investigator（Scenario fixture，非 Framework capability）
+- 空 input properties（M1 不需要参数化）
+- Mock 数据内部常量（不需要 fixture framework）
+- 测试 Contract + Deterministic + Scenario Facts
 
 **Acceptance Criteria:**
-- [ ] 符合 Incident Scenario
-- [ ] 返回固定 Mock 数据
-- [ ] 可被 Spring AI 调用
-- [ ] 放在 examples 或 test fixtures，不在产品代码
-- [ ] 单元测试覆盖
+- [x] 两个 Tool 在 examples/incident-investigator/tools
+- [x] 直接实现 Spring AI ToolCallback
+- [x] 返回固定 Mock 数据
+- [x] 单元测试覆盖（Contract + Deterministic + Scenario Facts）
+- [x] ./mvnw test -pl examples/incident-investigator 通过（6/6 tests）
+- [x] ./mvnw clean verify 通过（全项目）
+- [x] 不创建 Arctra Tool Contract
+- [x] 不创建 Registry/Provider/Adapter
+- [x] arctra-core 保持纯 Java
 
 ---
 

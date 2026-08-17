@@ -25,6 +25,12 @@
             <artifactId>arctra-spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- Spring AI Model (for ToolCallback) -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-model</artifactId>
+        </dependency>
+
         <!-- Spring Boot Starter Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
