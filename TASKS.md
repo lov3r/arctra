@@ -199,37 +199,60 @@
 
 ### M1-T6: Spring AI-based Execution Engine 实现
 
-**状态：** BACKLOG
+**状态：** COMPLETE ✅
 **估算：** 2 天
 **依赖：** M1-T2, M1-T3, M1-T5
+**完成日期：** 2026-08-17
 
 **目标：** 在 arctra-runtime-react 实现 Execution Engine
 
 **范围：**
 - 实现 AgentExecutionEngine 接口
-- 基于 M1-T3 的推荐方案（复用 Spring AI or 自建）
+- 基于 M1-T3 的推荐方案（复用 Spring AI）
 - 收集 Evidence（Tool 调用记录）
 - 返回 AgentResult（包含 Evidence）
-- 使用 M1-T3 验证的命名（可能不是 NativeReActEngine）
+- 使用准确命名：SpringAiToolCallingEngine
 
 **交付物：**
-- Spring AI-based Engine（实现 AgentExecutionEngine）
-- Evidence 收集机制
-- 单元测试
+- ✅ SpringAiToolCallingEngine (public)
+- ✅ EvidenceCapturingToolCallback (package-private)
+- ✅ Evidence 收集机制（per-execution wrapper）
+- ✅ Unit tests (10 tests: 4 Engine + 6 Wrapper)
+
+**关键设计：**
+- 类名：SpringAiToolCallingEngine（准确反映基于 Spring AI Tool Calling）
+- 构造器：ChatModel + List<ToolCallback>
+- 执行流程：per-execution Evidence collection + wrapped tools + ChatClient.prompt().tools()
+- AgentDefinition → system prompt（兼容 null description）
+- Evidence 格式：source = "tool:" + toolName, content = tool result
+- Wrapper 透明代理所有 ToolCallback 方法（getToolDefinition, getToolMetadata, call, call(ToolContext)）
+- 失败语义：Wrapper 不吞异常，失败不产生 Evidence
+- 执行隔离：无 per-execution mutable state 泄漏
 
 **Acceptance Criteria:**
-- [ ] 实现 AgentExecutionEngine 接口
-- [ ] 基于 Spring AI ChatClient
-- [ ] 收集 Evidence
-- [ ] 返回 AgentResult
-- [ ] 命名准确反映实际机制
+- [x] 实现 AgentExecutionEngine 接口
+- [x] 基于 Spring AI ChatClient + Tool Calling Loop
+- [x] 收集 Evidence（per-execution）
+- [x] 返回 AgentResult(content, evidences)
+- [x] 命名准确反映实际机制
+- [x] Per-execution wrapper 保证执行隔离
+- [x] 兼容 AgentDefinition.description == null
+- [x] Wrapper 透明代理完整 ToolCallback 语义
+- [x] Engine public, Wrapper package-private
+- [x] 不依赖 examples
+- [x] ./mvnw test -pl arctra-runtime-react 通过（16 tests）
+- [x] ./mvnw clean verify 通过
+
+---
 - [ ] 单元测试覆盖（Mock Model/Tool）
 
 ---
 
 ### M1-T7: Incident Scenario E2E Test
 
-**状态：** BACKLOG
+**状态：** READY
+**估算：** 1 天
+**依赖：** M1-T6
 **估算：** 1 天
 **依赖：** M1-T6
 

@@ -6,7 +6,7 @@
 
 ## Current Phase: M1 Incident Agent MVP (IN PROGRESS)
 
-**Current Task:** M1-T6 (Spring AI-based Engine 实现) - READY
+**Current Task:** M1-T7 (Incident Scenario E2E Test) - READY
 
 **Previous Phase:** BOOT-004 ✅ COMPLETE (2026-08-14)
 
@@ -49,13 +49,22 @@
   - 返回固定 Mock 数据（支持 Incident Scenario）
   - 6 tests pass, ./mvnw clean verify SUCCESS
 
+- ✅ **M1-T6:** Spring AI-based Execution Engine 实现 (2026-08-17)
+  - SpringAiToolCallingEngine 创建（public）
+  - EvidenceCapturingToolCallback 创建（package-private）
+  - 基于 Spring AI Tool Calling Loop
+  - Per-execution Evidence collection（execution-isolated）
+  - AgentDefinition → system prompt（兼容 null description）
+  - 16 tests pass (4 Engine + 6 Wrapper + 6 PoC), ./mvnw clean verify SUCCESS
+
 ### Next Task
 
-**M1-T6: Spring AI-based Engine 实现**
-- 创建 SpringAIBasedEngine（implements AgentExecutionEngine）
-- 使用 ChatClient + ToolCallingAdvisor
-- ToolCallback Wrapper 捕获 Evidence
-- 返回 AgentResult(content, evidences)
+**M1-T7: Incident Scenario E2E Test**
+- 创建完整 Incident Agent E2E 测试
+- 使用 QueryLogsTool + GetDeploymentTool
+- 使用 SpringAiToolCallingEngine
+- 验证 Evidence 收集
+- 验证 Agent 输出包含 Incident 分析
 
 ---
 
