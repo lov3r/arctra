@@ -8,7 +8,6 @@ import cn.bitcss.arctra.agent.AgentDefinition;
 import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
-import cn.bitcss.arctra.evidence.Evidence;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
