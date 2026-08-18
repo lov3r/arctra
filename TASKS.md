@@ -194,7 +194,35 @@
 
 ---
 
-### M2-T4: Documentation & Limitations 📋 READY
+### M2-T4: Documentation & Limitations ✅ DONE
+
+**完成日期：** 2026-08-18
+
+**目标：** 完善 M2 用户文档和限制说明
+
+**交付物：**
+- ✅ M2 Quick Start Guide (`docs/guides/M2-MULTI-TURN-QUICK-START.md`)
+- ✅ M2 Known Limitations (`docs/guides/M2-KNOWN-LIMITATIONS.md`)
+- ✅ Example README 更新（multi-turn scenario）
+- ✅ AgentExecutionContext Javadoc 改进
+- ✅ CURRENT-STATE.md 更新
+
+**文档统计：**
+- Quick Start: 654 words, 5分钟上手
+- Known Limitations: 946 words, 明确边界
+- Example README: 518 words (updated with M2 scenarios)
+
+**关键内容：**
+- ✅ ChatMemory.CONVERSATION_ID 使用要求（多处强调）
+- ✅ 并发、持久化、compaction 限制
+- ✅ Multi-turn vs Stateless 使用场景
+- ✅ 代码示例和最佳实践
+
+---
+
+## M2 Phase Status
+
+**M2: Session & Multi-Turn Capability ✅ COMPLETE (2026-08-18)**
 
 **依赖：** M2-T2 ✅
 

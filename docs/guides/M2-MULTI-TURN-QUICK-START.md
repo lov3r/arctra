@@ -13,6 +13,13 @@ Multi-turn conversation support allows agents to maintain context across multipl
 - **Session isolation** - Different sessions maintain independent conversation histories
 - **Stateless compatibility** - Single-turn (M1) behavior is preserved
 
+**Important:** Multi-turn ≠ Multi-step
+
+- **Multi-turn** = conversation continuity (multiple user inputs, M2)
+- **Multi-step** = structured task execution (single user input, multiple steps, future)
+
+See: [Execution Model Semantics](../architecture/EXECUTION-MODEL-SEMANTICS.md)
+
 ---
 
 ## Minimal Example
