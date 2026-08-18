@@ -10,6 +10,30 @@ package cn.bitcss.arctra.agent;
  * execution-level concern, not a request-level concern (user input) or definition-level concern
  * (agent template).
  *
+ * <h2>Usage</h2>
+ * <pre>{@code
+ * // Stateless execution (M1 behavior)
+ * var context = AgentExecutionContext.stateless();
+ * engine.execute(definition, request, context);
+ *
+ * // Session-based execution (M2 multi-turn)
+ * var context = AgentExecutionContext.withSession("session-123");
+ * engine.execute(definition, request, context);  // Turn 1
+ * engine.execute(definition, followUp, context);  // Turn 2 - continues conversation
+ * }</pre>
+ *
+ * <h2>Session Semantics</h2>
+ * <ul>
+ *   <li>Same sessionId → conversation continuity (Turn 2 sees Turn 1 context)</li>
+ *   <li>Different sessionId → conversation isolation (independent histories)</li>
+ *   <li>null sessionId → stateless execution (no conversation history)</li>
+ * </ul>
+ *
+ * <h2>Design Note</h2>
+ * <p>This is an execution-level semantic, not a request-level parameter. Session identity is
+ * orthogonal to user input — the same user input can be executed in different sessions or
+ * statelessly.
+ *
  * @param sessionId optional session identifier for conversation continuity. {@code null} indicates
  *     stateless execution.
  * @author lov3r

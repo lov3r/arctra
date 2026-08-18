@@ -14,7 +14,20 @@
 - ✅ M2-T1: Spring AI ChatMemory PoC
 - ✅ M2-T2: AgentExecutionContext & Session Support
 
-**下一步：** M2-T3 Multi-Turn E2E Test
+**下一步：** M2 COMPLETE → Plan M3
+
+---
+
+## M2 User Documentation
+
+**Quick Start:**
+- [M2 Multi-Turn Quick Start Guide](../guides/M2-MULTI-TURN-QUICK-START.md)
+
+**Limitations:**
+- [M2 Known Limitations](../guides/M2-KNOWN-LIMITATIONS.md)
+
+**Example:**
+- [Incident Investigator Example](../../examples/incident-investigator/README.md)
 
 ---
 
