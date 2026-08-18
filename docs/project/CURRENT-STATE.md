@@ -4,17 +4,22 @@
 
 ---
 
-## Current Phase: M2 Session & Multi-Turn Capability 🚧 IN PROGRESS
+## Current Phase: M2 Session & Multi-Turn Capability ✅ COMPLETE
 
-**状态：** M2-T2 COMPLETE (2026-08-18)
+**状态：** M2 COMPLETE (2026-08-18)
 
 **目标：** 支持有 session identity 的单 agent 多轮连续对话
 
 **已完成：**
 - ✅ M2-T1: Spring AI ChatMemory PoC
 - ✅ M2-T2: AgentExecutionContext & Session Support
+- ✅ M2-T3: Multi-Turn E2E Test (Root Cause Fixed)
+- ✅ M2-T4: Documentation & Limitations
+- ✅ Post-M2 Execution Model Reassessment
 
-**下一步：** M2 COMPLETE → Plan M3
+**Closure:** [M2 Phase Closure Report](../milestones/M2-PHASE-CLOSURE.md)
+
+**下一步：** M3 Phase Planning / Architecture Gate
 
 ---
 
