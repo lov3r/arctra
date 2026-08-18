@@ -7,6 +7,7 @@ import cn.bitcss.arctra.examples.incident.tools.QueryLogsTool;
 import cn.bitcss.arctra.runtime.react.SpringAiToolCallingEngine;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 
 import java.util.List;
 
@@ -40,9 +41,9 @@ class IncidentAgentFakeE2ETest {
     // Arrange: Create Engine
     var engine = new SpringAiToolCallingEngine(
         fakeChatModel,
-        List.of(queryLogsTool, getDeploymentTool)
+        List.of(queryLogsTool, getDeploymentTool),
+        MessageWindowChatMemory.builder().build()
     );
-
     // Arrange: Create AgentDefinition
     var agentDefinition = new AgentDefinition(
         "Incident Investigator",

@@ -55,7 +55,20 @@ V1 阶段：
 `docs/V1-QUALITY-GATE.md`：每个 Milestone 和 0.1.0 发布前必须检查的工程质量清单。
 
 
-## 项目标识
+## M2 Session & Multi-Turn 设计文档
+
+### 规划与研究
+- `docs/planning/M2-PHASE-PLANNING.md` - M2 原始规划（部分已被 SUPERSEDED）
+- `docs/planning/M2-T2-CONTRACT-GATE-V2.md` - M2-T2 最终架构决策
+- `docs/research/M2-COMPETITIVE-ARCHITECTURE-RESEARCH.md` - AgentScope/Spring AI Session API 研究
+- `docs/research/M2-T1-POC-REPORT.md` - Spring AI ChatMemory PoC 验证报告
+- `docs/design/M2-SESSION-FRAMEWORK-ANALYSIS.md` - Session 语义分析
+- `docs/design/M2-T2-AGENT-EXECUTION-CONTEXT-DESIGN.md` - AgentExecutionContext 设计决策
+
+### 实现报告
+- `docs/implementation/M2-T2-IMPLEMENTATION-REPORT.md` - M2-T2 实现总结
+
+---
 
 `docs/PROJECT-IDENTITY.md`：Arctra 品牌名、Maven Coordinates、Java Base Package 和模块命名的唯一参考。
 

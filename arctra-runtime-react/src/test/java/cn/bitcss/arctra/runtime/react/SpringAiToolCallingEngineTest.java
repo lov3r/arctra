@@ -6,6 +6,8 @@ import cn.bitcss.arctra.agent.AgentDefinition;
 import cn.bitcss.arctra.agent.AgentRequest;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -24,7 +26,8 @@ class SpringAiToolCallingEngineTest {
   @Test
   void should_execute_without_tools() {
     var fakeChatModel = new FakeChatModel("Hello from model");
-    var engine = new SpringAiToolCallingEngine(fakeChatModel, List.of());
+    ChatMemory chatMemory = MessageWindowChatMemory.builder().build();
+    var engine = new SpringAiToolCallingEngine(fakeChatModel, List.of(), chatMemory);
 
     var definition = new AgentDefinition("TestAgent", "A test agent");
     var request = new AgentRequest("Hi");
@@ -38,7 +41,8 @@ class SpringAiToolCallingEngineTest {
   @Test
   void should_use_agent_definition_in_system_prompt() {
     var fakeChatModel = new CapturingFakeChatModel();
-    var engine = new SpringAiToolCallingEngine(fakeChatModel, List.of());
+    ChatMemory chatMemory = MessageWindowChatMemory.builder().build();
+    var engine = new SpringAiToolCallingEngine(fakeChatModel, List.of(), chatMemory);
 
     var definition = new AgentDefinition("TestAgent", "A helpful assistant");
     var request = new AgentRequest("Hello");
@@ -54,7 +58,8 @@ class SpringAiToolCallingEngineTest {
   @Test
   void should_handle_null_description() {
     var fakeChatModel = new CapturingFakeChatModel();
-    var engine = new SpringAiToolCallingEngine(fakeChatModel, List.of());
+    ChatMemory chatMemory = MessageWindowChatMemory.builder().build();
+    var engine = new SpringAiToolCallingEngine(fakeChatModel, List.of(), chatMemory);
 
     var definition = new AgentDefinition("TestAgent", null);
     var request = new AgentRequest("Hello");
@@ -70,7 +75,8 @@ class SpringAiToolCallingEngineTest {
   void should_isolate_evidences_between_executions() {
     var tool = new ObservableMockTool();
     var fakeChatModel = new FakeChatModel("response");
-    var engine = new SpringAiToolCallingEngine(fakeChatModel, List.of(tool));
+    ChatMemory chatMemory = MessageWindowChatMemory.builder().build();
+    var engine = new SpringAiToolCallingEngine(fakeChatModel, List.of(tool), chatMemory);
 
     var def = new AgentDefinition("Agent", "Test");
 
@@ -109,9 +115,10 @@ class SpringAiToolCallingEngineTest {
     @Override
     public ChatResponse call(Prompt prompt) {
       // Capture system + user messages
-      this.lastPrompt = prompt.getInstructions().stream()
-          .map(msg -> msg.getText())
-          .reduce("", (a, b) -> a + " " + b);
+      this.lastPrompt =
+          prompt.getInstructions().stream()
+              .map(msg -> msg.getText())
+              .reduce("", (a, b) -> a + " " + b);
 
       var message = new AssistantMessage("response");
       var generation = new Generation(message);

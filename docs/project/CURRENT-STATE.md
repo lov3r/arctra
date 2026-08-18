@@ -4,11 +4,173 @@
 
 ---
 
-## Current Phase: M1 Incident Agent MVP ✅ COMPLETE
+## Current Phase: M2 Session & Multi-Turn Capability 🚧 IN PROGRESS
+
+**状态：** M2-T2 COMPLETE (2026-08-18)
+
+**目标：** 支持有 session identity 的单 agent 多轮连续对话
+
+**已完成：**
+- ✅ M2-T1: Spring AI ChatMemory PoC
+- ✅ M2-T2: AgentExecutionContext & Session Support
+
+**下一步：** M2-T3 Multi-Turn E2E Test
+
+---
+
+## M1 Incident Agent MVP ✅ COMPLETE (2026-08-17)
 
 **Status:** CLOSED (2026-08-17)  
 **Previous Phase:** BOOT-004 ✅ COMPLETE (2026-08-14)  
 **Next Phase:** M2 Session 与 Multi-Turn 能力 (pending approval)
+
+---
+
+## M2 Progress
+
+### Completed Tasks
+
+**M2-T1: Spring AI ChatMemory PoC (2026-08-18)**
+- ✅ 验证 Spring AI 2.0.0 ChatMemory API
+- ✅ 验证 MessageChatMemoryAdvisor
+- ✅ 验证 conversationId 传播机制
+- ✅ 文档：`docs/research/M2-T1-POC-REPORT.md`
+
+**M2-T2: AgentExecutionContext & Session Support (2026-08-18)**
+- ✅ 创建 `AgentExecutionContext(String sessionId)` record
+- ✅ 演进 `AgentExecutionEngine` contract（3-param canonical method）
+- ✅ `SpringAiToolCallingEngine` 实现 session support
+- ✅ 核心模块测试通过：62 tests
+- ✅ 文档：Contract Gate V2, Implementation Report
+
+### Current Architecture
+
+**M2 核心组件：**
+
+```
+AgentDefinition
++
+AgentRequest
++
+AgentExecutionContext  ← M2 NEW
+    └── sessionId: String (nullable)
+        ↓
+AgentExecutionEngine
+    └── execute(definition, request, context)  ← M2 EVOLVED
+        ↓
+SpringAiToolCallingEngine
+    ├── ChatMemory (shared across executions)  ← M2 NEW
+    ├── Evidence (per-execution isolated)
+    └── sessionId → conversationId mapping
+        ↓
+Spring AI
+    ├── MessageChatMemoryAdvisor
+    ├── ChatMemory.get(conversationId) / add(...)
+    └── Tool Calling Loop
+        ↓
+AgentResult
+    ├── content: String
+    └── evidences: List<Evidence>
+```
+
+**调用流程（M2 Multi-Turn）：**
+
+```
+Turn 1:
+  engine.execute(
+      definition,
+      request,
+      AgentExecutionContext.withSession("session-123")
+  )
+      ↓
+  SpringAiToolCallingEngine
+      ├── Check context.sessionId() != null
+      ├── Add MessageChatMemoryAdvisor(chatMemory)
+      └── Pass conversationId="session-123" to advisor
+          ↓
+  MessageChatMemoryAdvisor.before()
+      ├── chatMemory.get("session-123") → []
+      └── No history to inject
+          ↓
+  ChatModel + Tool Calling
+          ↓
+  MessageChatMemoryAdvisor.after()
+      └── chatMemory.add("session-123", newMessages)
+          ↓
+  return AgentResult(content, evidences)
+
+Turn 2:
+  engine.execute(
+      definition,
+      followUpRequest,
+      AgentExecutionContext.withSession("session-123")
+  )
+      ↓
+  MessageChatMemoryAdvisor.before()
+      ├── chatMemory.get("session-123") → [Turn 1 messages]
+      └── Inject history into prompt
+          ↓
+  ChatModel sees Turn 1 context + Turn 2 question
+          ↓
+  Response with context understanding
+```
+
+### Session Semantics (M2)
+
+**Session 定义：**
+> Session = execution continuity identity
+
+**Session 不是：**
+- ❌ 独立的 domain entity（无 Session class）
+- ❌ Conversation（conversation 是 session 的内容）
+- ❌ Memory（memory 是 conversation 的存储机制）
+
+**Session 是：**
+- ✅ Execution context identity（String sessionId）
+- ✅ Conversation isolation boundary
+- ✅ State continuity marker
+
+**当前实现：**
+- `AgentExecutionContext(String sessionId)` - execution-level semantic
+- `sessionId` nullable - null 表示 stateless execution
+- Factory methods: `stateless()` / `withSession(String)`
+- 不创建：Session class, SessionRuntime, SessionRepository
+
+**ChatMemory Lifecycle：**
+- `ChatMemory` 通过 SpringAiToolCallingEngine constructor injection
+- Shared across executions（同一 conversationId 看到相同 history）
+- Spring AI MessageWindowChatMemory 提供 in-memory storage
+- `sessionId` → `conversationId` 映射由 Engine 负责
+
+**Session Isolation：**
+- Different sessionId → Different conversationId → Isolated history
+- Spring AI ChatMemory 自动处理隔离
+- 无需额外隔离机制
+
+### Known Limitations (M2)
+
+**并发：**
+- ⚠️ 同一 session 并发请求不支持
+- 原因：Spring AI InMemoryChatMemory 并发安全性未验证，无 session lock
+- 计划：M3 实现 session locking（Redis-based）
+
+**Context Compaction：**
+- ⚠️ 无 turn-safety
+- MessageWindowChatMemory 使用简单 sliding window（可能切断 User/Assistant 配对）
+- 计划：M3 考虑迁移到 Spring AI Session API 或自建 compaction
+
+**Tool Messages：**
+- ⚠️ Tool call/response 是否进入 ChatMemory 未通过 executable PoC 验证
+- 假设：MessageChatMemoryAdvisor.after() 保存所有 messages
+- 验证：M2-T3 integration test
+
+**Long-term Memory：**
+- ❌ M2 不支持跨 session knowledge extraction
+- 计划：M3+
+
+**Persistence：**
+- ⚠️ M2 仅支持 in-memory（InMemoryChatMemory）
+- 计划：M3 可选 JDBC/Redis persistence
 
 ---
 

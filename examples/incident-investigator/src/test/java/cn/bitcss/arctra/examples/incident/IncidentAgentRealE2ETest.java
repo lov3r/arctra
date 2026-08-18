@@ -8,6 +8,7 @@ import cn.bitcss.arctra.runtime.react.SpringAiToolCallingEngine;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
@@ -48,9 +49,9 @@ class IncidentAgentRealE2ETest {
     // Arrange: Create Engine with real ChatModel
     var engine = new SpringAiToolCallingEngine(
         chatModel,
-        List.of(queryLogsTool, getDeploymentTool)
+        List.of(queryLogsTool, getDeploymentTool),
+        MessageWindowChatMemory.builder().build()
     );
-
     // Arrange: Create AgentDefinition
     var agentDefinition = new AgentDefinition(
         "Incident Investigator",

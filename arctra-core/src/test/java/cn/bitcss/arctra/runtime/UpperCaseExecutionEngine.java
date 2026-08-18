@@ -1,6 +1,7 @@
 package cn.bitcss.arctra.runtime;
 
 import cn.bitcss.arctra.agent.AgentDefinition;
+import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
 
@@ -14,7 +15,8 @@ import cn.bitcss.arctra.agent.AgentResult;
 class UpperCaseExecutionEngine implements AgentExecutionEngine {
 
   @Override
-  public AgentResult execute(AgentDefinition definition, AgentRequest request) {
+  public AgentResult execute(
+      AgentDefinition definition, AgentRequest request, AgentExecutionContext context) {
     return new AgentResult(request.userMessage().toUpperCase());
   }
 }

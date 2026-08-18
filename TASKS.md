@@ -57,7 +57,156 @@
 
 ---
 
-## 当前 Milestone：M2 Session 与 Multi-Turn 能力
+## 当前 Milestone：M2 Session 与 Multi-Turn 能力 🚧 IN PROGRESS
+
+**状态：** M2-T2 COMPLETE, M2-T3 READY
+
+**目标：** 让 Arctra Agent 支持有 session identity 的单 agent 多轮连续对话
+
+**核心能力：**
+- Same session → conversation continuity（对话连续性）
+- Different session → conversation isolation（会话隔离）
+
+**关键架构决策（已验证）：**
+- ✅ Arctra owns session semantics（AgentExecutionContext）
+- ✅ Spring AI provides conversation storage（ChatMemory）
+- ✅ Engine contract evolved (3-param canonical method)
+- ✅ arctra-core 继续保持 framework-neutral
+
+---
+
+### M2-T1: Spring AI ChatMemory PoC ✅ DONE
+
+**完成日期：** 2026-08-18
+
+**目标：** 验证 Spring AI 2.0.0 ChatMemory 实际 API 和行为
+
+**交付物：**
+- ✅ Spring AI ChatMemory API 验证（ChatMemory interface, MessageWindowChatMemory）
+- ✅ MessageChatMemoryAdvisor 验证
+- ✅ conversationId 传播机制验证（advisor param）
+- ✅ Session isolation 机制确认
+- ✅ 文档：`docs/research/M2-T1-POC-REPORT.md`
+
+**关键发现：**
+- ChatMemory.get(conversationId) / add(conversationId, messages)
+- MessageChatMemoryAdvisor 通过 advisor.param("conversationId", id) 接收 session
+- MessageWindowChatMemory.builder().maxMessages(N) 配置 sliding window
+- Spring AI 负责 history injection 和 persistence
+
+---
+
+### M2-T2: AgentExecutionContext & Session Support ✅ DONE
+
+**完成日期：** 2026-08-18
+
+**目标：** 实现 AgentExecutionContext 和 Engine contract evolution
+
+**交付物：**
+- ✅ `AgentExecutionContext(String sessionId)` record
+  - Factory methods: `stateless()`, `withSession(String)`
+  - 测试：6 tests passed
+- ✅ `AgentExecutionEngine` contract evolution
+  - 新增 3-param canonical method: `execute(def, req, context)`
+  - 保留 2-param compatibility method (default)
+  - 测试：所有 test engines 更新
+- ✅ `SpringAiToolCallingEngine` session support
+  - Constructor 新增 `ChatMemory` 参数
+  - sessionId → conversationId 映射
+  - MessageChatMemoryAdvisor 集成
+  - 测试：4 tests passed
+- ✅ 核心模块测试通过：62 tests (1 skipped)
+- ✅ 文档：
+  - `docs/design/M2-T2-AGENT-EXECUTION-CONTEXT-DESIGN.md`
+  - `docs/planning/M2-T2-CONTRACT-GATE-V2.md`
+  - `docs/implementation/M2-T2-IMPLEMENTATION-REPORT.md`
+
+**关键决策：**
+- sessionId 是 Execution Context（不是 Request, Definition, 或 Engine capability）
+- nullable String 设计（不用 Optional 或 SessionId value object）
+- ChatMemory 通过 constructor injection（shared across executions）
+- Evidence collection 保持 per-execution isolation
+
+**未创建的抽象（遵循 YAGNI）：**
+- ❌ Session class
+- ❌ SessionRuntime
+- ❌ SessionRepository
+- ❌ ArctraMessage wrapper
+- ❌ Memory abstraction
+
+**已知限制：**
+- ⚠️ 同一 session 并发请求不支持（M3: session locking）
+- ⚠️ 无 context compaction（M3: 考虑 Spring AI Session API）
+- ⚠️ Tool call messages persistence 未通过 executable PoC 验证
+
+**Breaking Changes：**
+- M1 用户代码：零影响（default method 保护）
+- M1 Engine 实现者：需要实现 3-param method
+- Example tests：需要添加 ChatMemory 参数（3个文件待修复）
+
+---
+
+### M2-T3: Multi-Turn E2E Scenario Test 📋 READY
+
+**依赖：** M2-T2 ✅
+
+**目标：** 验证完整 multi-turn conversation scenario
+
+**Acceptance Criteria：**
+1. Turn 1 execution 成功
+2. Turn 2 理解 Turn 1 context（conversation continuity）
+3. Different sessions 完全隔离
+4. Evidence 正确捕获（per-execution）
+5. Tool call/response 在 history 中（需验证）
+
+**Test Scenario：**
+```java
+// Turn 1
+var result1 = engine.execute(
+    incidentAgent,
+    new AgentRequest("生产环境 500 错误"),
+    AgentExecutionContext.withSession("incident-123")
+);
+
+// Turn 2
+var result2 = engine.execute(
+    incidentAgent,
+    new AgentRequest("最可能的原因是什么？"),
+    AgentExecutionContext.withSession("incident-123")
+);
+
+// Assert: Turn 2 understands Turn 1 context
+// Assert: Tool calls visible in history
+```
+
+**关键验证点：**
+- Multi-turn continuity
+- Session isolation
+- Tool message persistence
+- Evidence isolation
+
+---
+
+### M2-T4: Documentation & Limitations 📋 BACKLOG
+
+**依赖：** M2-T3
+
+**目标：** 完整文档化 M2 能力和限制
+
+**交付物：**
+- M2 用户指南（如何使用 multi-turn）
+- Known limitations 文档
+- CURRENT-STATE.md 更新
+- Example README 更新
+- ADR（如果需要）
+
+**重点说明：**
+- Multi-turn 使用方式
+- Session 不支持并发
+- 无 context compaction
+- ChatMemory lifecycle
+
+---
 
 **状态：** 🟡 PENDING (awaiting M1 approval and M2 kickoff)
 
