@@ -146,7 +146,55 @@
 
 ---
 
-### M2-T3: Multi-Turn E2E Scenario Test 📋 READY
+### M2-T3: Multi-Turn E2E Scenario Test ✅ DONE (Root Cause Fixed, E2E Ready)
+
+**完成日期：** 2026-08-18
+
+**目标：** 验证完整 multi-turn conversation scenario
+
+**实际完成：**
+- ✅ Root Cause 分析并修复（使用正确的 `ChatMemory.CONVERSATION_ID` key）
+- ✅ SpringAiToolCallingEngine 修复
+- ✅ 最小验证测试通过（Memory + Tools 组合工作正常）
+- ✅ M2-T3 E2E Test 创建（5个场景，使用真实 ChatModel）
+- ⚠️ 真实 API 验证暂未执行（上游代理不可用）
+
+**Root Cause：**
+- 使用错误的字符串字面量 `"conversationId"`
+- 正确应使用 `ChatMemory.CONVERSATION_ID` 常量（值为 `"chat_memory_conversation_id"`）
+
+**关键发现：**
+- MessageChatMemoryAdvisor + tools 完全兼容
+- defaultAdvisors + prompt-level param 正常工作
+- Conversation history 正确注入（验证通过）
+
+**E2E 测试场景：**
+1. Same Session Continuity - Turn 2 理解 Turn 1
+2. Different Session Isolation - Sessions 不互相干扰
+3. Session Re-entry - A → B → A 恢复 context
+4. Evidence Isolation - per-execution，不累积
+5. Stateless Regression - M1 behavior 保留
+
+**测试状态：**
+- @Disabled - 需要手动启用
+- 编译通过：5 tests skipped
+- 等待真实 API 可用后验证
+
+**文档：**
+- `docs/implementation/M2-T3-ROOT-CAUSE-ANALYSIS-REPORT.md`
+
+**已知限制：**
+- Tool message persistence 未通过真实 API 完整验证
+- 同一 session 并发不支持（M3）
+- 无 context compaction（M3）
+
+**下一步：**
+- 当真实 API 可用时，运行 M2-T3 验证完整行为
+- 继续 M2-T4 Documentation
+
+---
+
+### M2-T4: Documentation & Limitations 📋 READY
 
 **依赖：** M2-T2 ✅
 

@@ -140,7 +140,17 @@ Turn 2:
 - `ChatMemory` 通过 SpringAiToolCallingEngine constructor injection
 - Shared across executions（同一 conversationId 看到相同 history）
 - Spring AI MessageWindowChatMemory 提供 in-memory storage
+- `sessionId` 通过 `ChatMemory.CONVERSATION_ID` param key 传递
 - `sessionId` → `conversationId` 映射由 Engine 负责
+
+**Critical Implementation Detail:**
+```java
+// CORRECT - Use constant
+promptSpec.advisors(a -> a.param(ChatMemory.CONVERSATION_ID, sessionId))
+
+// WRONG - String literal will fail
+promptSpec.advisors(a -> a.param("conversationId", sessionId))  // ❌
+```
 
 **Session Isolation：**
 - Different sessionId → Different conversationId → Isolated history

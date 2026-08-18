@@ -61,10 +61,9 @@ public class SpringAiToolCallingEngine implements AgentExecutionEngine {
     var wrappedTools =
         tools.stream().map(tool -> new EvidenceCapturingToolCallback(tool, evidences)).toList();
 
-    // Build ChatClient with advisors
+    // Build ChatClient with memory advisor when session support is needed
     var clientBuilder = ChatClient.builder(chatModel);
 
-    // Add memory advisor when session is present
     String sessionId = context.sessionId();
     if (sessionId != null) {
       var memoryAdvisor = MessageChatMemoryAdvisor.builder(chatMemory).build();
@@ -84,9 +83,9 @@ public class SpringAiToolCallingEngine implements AgentExecutionEngine {
             .user(request.userMessage())
             .tools(wrappedTools.toArray(new ToolCallback[0]));
 
-    // Pass sessionId to memory advisor via advisor context
+    // Pass conversationId to memory advisor via advisor context
     if (sessionId != null) {
-      promptSpec = promptSpec.advisors(spec -> spec.param("conversationId", sessionId));
+      promptSpec = promptSpec.advisors(a -> a.param(ChatMemory.CONVERSATION_ID, sessionId));
     }
 
     // Execute
