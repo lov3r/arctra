@@ -22,7 +22,7 @@
 7. ⚠️ REQUIRE_APPROVAL continuation mechanism validated (with constraints)
 8. ✅ Persistence scope: In-memory only (M4)
 9. ✅ Reference scenario scoped
-10. ✅ Public API delta: 3 new types
+10. ✅ Public API delta: 5 new types + 1 evolved
 
 **Gate Verdict:** ✅ **APPROVED FOR M4-T2** (with documented constraints)
 
