@@ -81,7 +81,7 @@ public class SpringAiToolCallingEngine implements AgentExecutionEngine {
             .prompt()
             .system(systemInstruction)
             .user(request.userMessage())
-            .tools(wrappedTools.toArray(new ToolCallback[0]));
+            .tools(wrappedTools);
 
     // Pass conversationId to memory advisor via advisor context
     if (sessionId != null) {

@@ -149,8 +149,9 @@ class AgentProcessTest {
   class ResumeResuspensionTests {
 
     @Test
-    @DisplayName("Resume can suspend again")
+    @DisplayName("Resume can suspend again with stable identity")
     void resumeCanSuspendAgain() {
+      // Create nested process for continuation extraction
       AgentProcess nestedProcess = new DefaultAgentProcess(signal -> new AgentResult("nested"));
 
       AgentProcess process =
@@ -158,13 +159,14 @@ class AgentProcessTest {
 
       AgentResult result = process.resume(new ApprovalSignal(true, "approved"));
 
+      // Contract fix: Re-suspension maintains stable identity
       assertThat(result.isSuspended()).isTrue();
-      assertThat(result.process()).isSameAs(nestedProcess);
+      assertThat(result.process()).isSameAs(process); // Same process (stable identity)
       assertThat(process.status()).isEqualTo(ProcessStatus.WAITING);
     }
 
     @Test
-    @DisplayName("Re-suspended process can be resumed multiple times")
+    @DisplayName("Re-suspended process can be resumed multiple times with stable identity")
     void resuspendedProcessCanResumeAgain() {
       // Track resume count to implement multi-step process
       final int[] resumeCount = {0};
@@ -184,15 +186,17 @@ class AgentProcessTest {
                 }
               });
 
-      // First resume - should suspend again
+      // First resume - should suspend again with SAME process (stable identity)
       AgentResult firstResult = process.resume(new ApprovalSignal(true, "step1"));
       assertThat(process.status()).isEqualTo(ProcessStatus.WAITING);
       assertThat(firstResult.isSuspended()).isTrue();
+      assertThat(firstResult.process()).isSameAs(process); // Stable identity
 
       // Second resume - should complete
       AgentResult secondResult = process.resume(new ApprovalSignal(true, "step2"));
       assertThat(process.status()).isEqualTo(ProcessStatus.COMPLETED);
       assertThat(secondResult.isCompleted()).isTrue();
+      assertThat(secondResult.content()).isEqualTo("step 2 complete");
     }
   }
 

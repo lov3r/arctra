@@ -28,6 +28,11 @@ public enum ProcessStatus {
    * Active execution.
    *
    * <p>Process is currently executing.
+   *
+   * <p><strong>M4 Note:</strong> In single-JVM synchronous execution, RUNNING is a transient
+   * internal state during {@link AgentProcess#resume(ContinuationSignal)} execution. External
+   * consumers will primarily observe WAITING, COMPLETED, or FAILED. Future distributed or
+   * asynchronous execution may make RUNNING reliably observable through concurrent status queries.
    */
   RUNNING,
 

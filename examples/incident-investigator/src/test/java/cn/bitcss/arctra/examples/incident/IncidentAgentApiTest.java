@@ -225,7 +225,7 @@ class IncidentAgentApiTest {
 
     assertThat(result.evidences())
         .extracting("source")
-        .allMatch(source -> source.startsWith("tool:"));
+        .allMatch(source -> ((String) source).startsWith("tool:"));
 
     System.out.println("\n✅ Evidence capture regression passed");
     System.out.println("M1 Evidence mechanism preserved in M3 Agent API");
