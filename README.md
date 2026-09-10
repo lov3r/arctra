@@ -20,11 +20,11 @@ Arctra is a Spring-based framework for building, testing, governing, recovering,
 
 ## Project Status
 
-🚧 **M2 Session & Multi-Turn Capability - IN PROGRESS**
+✅ **M5 Durable Suspension/Recovery - COMPLETE (2026-09-09)**
 
-The project has completed M1 (Incident Agent MVP) and is implementing M2 (Multi-Turn Conversation Support).
+The project has completed foundational milestones M1-M5, establishing Agent execution, session management, process lifecycle semantics, and durable recovery capabilities.
 
-### Completed
+### Completed Milestones
 
 **M1: Incident Agent MVP (2026-08-17)**
 - ✅ Agent domain model (AgentDefinition, AgentRequest, AgentResult)
@@ -33,23 +33,81 @@ The project has completed M1 (Incident Agent MVP) and is implementing M2 (Multi-
 - ✅ Incident investigation example (with real tools)
 - ✅ E2E tests (fake + real scenarios)
 
-**M2-T1: Spring AI ChatMemory PoC (2026-08-18)**
-- ✅ Verified Spring AI 2.0.0 ChatMemory API
-- ✅ Validated MessageChatMemoryAdvisor
+**M2: Session & Multi-Turn Capability (2026-08-18)**
+- ✅ Spring AI 2.0.0 ChatMemory integration
+- ✅ MessageChatMemoryAdvisor for conversation history
+- ✅ AgentExecutionContext with session identity
+- ✅ Multi-turn conversation flow
 
-**M2-T2: Session Support (2026-08-18)**
-- ✅ AgentExecutionContext for session identity
-- ✅ AgentExecutionEngine contract evolution (3-param method)
-- ✅ SpringAiToolCallingEngine multi-turn support
-- ✅ ChatMemory integration
+**M3: Agent API & Runtime Boundary (2026-08)**
+- ✅ Agent public API stabilization
+- ✅ AgentRuntime abstraction layer
+- ✅ AgentExecutionEngine seam
+- ✅ Clean architecture boundaries
 
-### In Progress
+**M4: Process Lifecycle & Governance (2026-09-08)**
+- ✅ **M4-T1:** AgentProcess contract & Dynamic Materialization
+- ✅ **M4-T2:** Process lifecycle foundation (WAITING/RUNNING/COMPLETED)
+- ✅ **M4-T3:** Spring AI governance integration & memory closure
+- ✅ **M4-T4:** Process failure semantics (FAILED lifecycle)
 
-**M2-T3: Multi-Turn E2E Test** - READY
+**M5: Durable Suspension/Recovery (2026-09-09)** ✅ **M5-T4 FINAL: GO**
+- ✅ **M5-T1:** Durable Process Contract Gate
+- ✅ **M5-T2:** Durable Resume Reconstruction PoC
+- ✅ **M5-T3:** Durable Recovery Architecture Gate
+- ✅ **M5-T4:** Durable Suspension/Recovery Implementation
+  - Checkpoint-backed durable suspension
+  - Cross-runtime/JVM recovery
+  - Unified resume pipeline (CHECK A/B)
+  - RuntimeBinding resolution contract
+  - Local handle lifecycle semantics
+  - Memory/Evidence/Governance continuity
+  - Concurrency contracts (CAS + CHECK B)
+  - 237 tests, 0 failures
+
+**Current Capabilities:**
+- Agent execution with stateless reusable handles
+- AgentProcess lifecycle for tasks crossing synchronous boundaries
+- Tool governance (ALLOW/DENY/REQUIRE_APPROVAL)
+- Human-in-the-loop approval with suspend/resume
+- Session-backed conversation continuity across suspend/resume
+- Evidence collection and stable process identity
+- Complete failure semantics (FAILED as terminal state)
+- **Durable suspension/recovery across JVM boundaries** 🆕
+- **Cross-runtime recovery (A → B → C)** 🆕
+- **RuntimeBinding resolution for logical agent reconstruction** 🆕
+- **CHECK A/B validation fencing** 🆕
+- **Concurrency conflict detection** 🆕
+
+**Architecture Documentation:**
+- M5 Milestone Summary: `M5-MILESTONE-SUMMARY.md`
+- M5-T4 Implementation Guide: `M5-T4-IMPLEMENTATION-GUIDE.md`
+- M5-T4 Final Closure Report: `M5-T4-FINAL-CLOSURE-REPORT.md`
+- M4 Final Architecture: `docs/architecture/M4-FINAL-ARCHITECTURE.md`
+- M5 Planning & Architecture: `docs/planning/`, `docs/architecture/`
+
+**M5 Known Limitations (design boundaries):**
+- InMemoryCheckpointStore: JVM-local reference implementation
+- No CheckpointStore/ChatMemory atomicity (crash window)
+- At-least-once tool execution semantics (not exactly-once)
+- Application-defined RuntimeBindingResolver required
+- No automatic retry for ResumePreparationException
+- Continuation code duplication (M6 technical debt)
+
+**M5 Explicitly Does NOT Claim:**
+- Production-ready distributed durability
+- Exactly-once tool execution guarantees
+- Atomic checkpoint/ChatMemory transactions
 
 ### Next
-- M2-T4: Documentation & Limitations
-- M3: Context Compaction & Long-term Memory
+
+M6 direction to be determined. Candidate work items:
+- Production CheckpointStore implementations (JDBC, Redis)
+- RuntimeBinding reconstruction strategies
+- CheckpointStore/ChatMemory consistency coordination
+- Tool deduplication/idempotency strategies
+- Automatic retry framework for ResumePreparationException
+- Continuation pipeline consolidation
 
 ---
 

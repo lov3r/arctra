@@ -310,6 +310,202 @@ var result2 = engine.execute(
 
 ## Backlog Milestones
 
+---
+
+## M3: Agent API & Runtime Boundary ✅ COMPLETE (2026-08)
+
+**目标：** 稳定公共 API，建立清晰的运行时边界
+
+**Definition of Done:**
+- ✅ Agent 公共 API 冻结（Agent, AgentDefinition, AgentRequest, AgentResult）
+- ✅ AgentRuntime 抽象层
+- ✅ AgentExecutionEngine 作为执行策略 seam
+- ✅ 架构边界清晰（core, runtime, engine）
+
+**关键决策：**
+- Agent 是无状态的可重用句柄
+- AgentRuntime 负责创建和管理 Agent 实例
+- AgentExecutionEngine 是可替换的执行策略
+- 核心保持框架中立
+
+---
+
+## M4: Process Lifecycle & Governance ✅ COMPLETE (2026-09-08)
+
+**目标：** 建立跨同步边界的任务生命周期语义和人工批准能力
+
+**Definition of Done:**
+- ✅ AgentProcess 生命周期完整（WAITING/RUNNING/COMPLETED/FAILED）
+- ✅ Dynamic Materialization（仅在需要时创建 Process）
+- ✅ 治理策略（ALLOW/DENY/REQUIRE_APPROVAL）
+- ✅ 人工批准的悬挂/恢复
+- ✅ 会话内存跨悬挂/恢复正确性
+- ✅ 失败语义完整
+- ✅ 完整测试覆盖（152 tests, 0 failures）
+
+**Tasks:**
+- ✅ **M4-T1:** Process & Governance Contract Gate
+  - AgentProcess 语义设计
+  - Dynamic Materialization 契约
+  - Process vs Session 区分
+  - 治理决策模型
+  - 稳定 processId 不变式
+
+- ✅ **M4-T2:** Agent Process Lifecycle Foundation
+  - DefaultAgentProcess 实现
+  - ProcessStatus 状态机
+  - Continuation 机制（Java 闭包）
+  - Suspension/Resume 基础
+  - ProcessFactory 和测试
+
+- ✅ **M4-T3:** Spring AI Governance + Memory Closure
+  - GovernanceToolCallingAdvisor 实现
+  - 批量治理前置检查（DENY > REQUIRE_APPROVAL > ALLOW）
+  - ToolApprovalRequiredSignal 内部控制流
+  - 协议延续（messages 重放）
+  - 会话内存正确性（H + U + A，无占位符污染）
+  - Evidence 收集集成
+
+- ✅ **M4-T4:** Process Failure Semantics
+  - FAILED 生命周期路径
+  - Resume 失败边界（continuation 异常 → FAILED）
+  - 终止状态行为（FAILED 不能 resume/result）
+  - 初始失败保持普通异常（不物化 Process）
+  - 零公共 API 扩展（原始异常不包装）
+
+**关键成就：**
+- 任务生命周期可跨多个同步调用边界
+- 人工在环的执行流程（REQUIRE_APPROVAL）
+- 批量工具治理（批次级别批准）
+- 稳定的进程标识（processId 跨整个生命周期）
+- 会话内存跨悬挂/恢复保持连续性
+- 完整失败语义（FAILED 作为终止状态）
+
+**M4 冻结的不变式（15 条）：**
+1. Agent 是可重用且无状态的
+2. Process 表示一个逻辑任务执行
+3. 稳定的 Process 标识是 processId
+4. Process 和 Session 是独立标识
+5. Process 是动态物化的
+6. WAITING 是 Process 状态，不是 Assistant 内容
+7. 悬挂的 Process 可以保持一个对话轮次开放
+8. Governance 在执行前评估整个 ToolCall 批次
+9. DENY 在批次中执行零个工具
+10. REQUIRE_APPROVAL 在批准前执行零个工具
+11. 实际工具执行委托给 Spring AI
+12. FAILED 适用于已物化的、其延续失败的 Process
+13. 初始同步失败不物化 Process
+14. COMPLETED 和 FAILED 是终止状态
+15. 工具协议不是持久化的对话历史
+
+**架构文档：**
+- 最终架构报告：`docs/architecture/M4-FINAL-ARCHITECTURE.md`
+- 规划文档：`docs/planning/M4-*.md`
+- 项目报告：`docs/project/M4-*.md`
+
+**已知 M4 限制（设计决策）：**
+- 内存 Continuation（无持久化/检查点）
+- 批准粒度 = Batch（不支持单工具批准）
+- 无 Retry 框架（FAILED 是终止状态）
+- 无事件总线（依赖直接查询）
+- 部分 Evidence 在失败时不可访问
+- 失败后会话轮次保持开放（H + U）
+
+---
+
+## M5: Durable Suspension/Recovery ✅ COMPLETE (2026-09-09)
+
+**目标:** 持久暂停/恢复能力，使进程可以跨 JVM 边界和运行时实例恢复执行
+
+**Definition of Done:**
+- ✅ Checkpoint-backed durable suspension
+- ✅ Cross-runtime/JVM recovery
+- ✅ Unified resume pipeline (CHECK A/B)
+- ✅ Local handle lifecycle semantics
+- ✅ Memory/Evidence/Governance continuity
+- ✅ Concurrency contracts
+- ✅ 237 tests, 0 failures
+- ✅ M4 compatibility preserved
+
+**Tasks:**
+- ✅ **M5-T1:** Durable Process Contract Gate
+  - 持久进程语义设计
+  - CheckpointStore 契约
+  - RuntimeBinding 模型
+  - CHECK A/B 验证策略
+
+- ✅ **M5-T2:** Durable Resume Reconstruction PoC
+  - 协议重建验证
+  - Spring AI messages 重放可行性
+
+- ✅ **M5-T3:** Durable Recovery Architecture Gate
+  - DurableExecutionEngine 接口设计
+  - RuntimeBindingResolver 契约
+  - 跨运行时恢复架构
+
+- ✅ **M5-T4:** Durable Suspension/Recovery Implementation ✅ **FINAL GO**
+  - Phase 1-10 完整实施
+  - CheckpointStore + RuntimeBinding
+  - DurableExecutionEngine 实现
+  - SpringAiToolCallingEngine 持久能力
+  - 完整测试覆盖（97 个新测试）
+  - 跨运行时恢复验证（A → B → C）
+  - Memory/Evidence/Governance 连续性
+  - 并发冲突语义
+
+**关键成就:**
+- 持久暂停/恢复跨 JVM 边界
+- RuntimeBinding 解析契约
+- CHECK A（验证前置）/ CHECK B（条件转换）
+- 本地句柄生命周期（WAITING/FAILED）
+- 跨运行时资源权威验证
+- At-least-once 工具执行语义（已记录）
+- M4 ephemeral 路径完全保留
+
+**公共 API 扩展:**
+- `DurableExecutionEngine extends AgentExecutionEngine`
+- `RuntimeBindingResolver`
+- `CheckpointStore`（+ `InMemoryCheckpointStore` 参考实现）
+- `RuntimeBinding(AgentDefinition, AgentExecutionContext)`
+- `SuspensionCheckpoint`
+- 6 个新异常类型
+- `AgentRuntime.resumeProcess()`
+- `ProcessFactory.createDurableSuspended()`
+
+**架构文档:**
+- M5 里程碑总结: `M5-MILESTONE-SUMMARY.md`
+- M5-T4 实施指南: `M5-T4-IMPLEMENTATION-GUIDE.md`
+- M5-T4 最终闭环报告: `M5-T4-FINAL-CLOSURE-REPORT.md`
+- M5 规划文档: `docs/planning/M5-*.md`
+- M5 架构文档: `docs/architecture/M5-*.md`
+
+**已知 M5 限制（设计边界）:**
+- InMemoryCheckpointStore: JVM-local 参考实现
+- 无 CheckpointStore/ChatMemory 原子性（崩溃窗口）
+- At-least-once 工具执行（不保证恰好一次）
+- 应用程序定义的 RuntimeBindingResolver（无内置实现）
+- 本地句柄是快照（可能过时）
+- 无 RuntimeBindingKey 迁移
+- Continuation 代码重复（M6 技术债务）
+
+**M5 明确不声称:**
+- ❌ 生产就绪的分布式持久性
+- ❌ 恰好一次工具执行保证
+- ❌ 原子 checkpoint/ChatMemory 事务
+- ❌ 自动重试 ResumePreparationException
+- ❌ RuntimeBindingResolver 序列化 Java 对象恢复
+
+**延期到 M6+ 的工作:**
+- 生产 RuntimeBinding 重建策略
+- 生产 CheckpointStore 实现（JDBC, Redis）
+- CheckpointStore/ChatMemory 一致性协调
+- 工具去重/幂等性策略
+- ResumePreparationException 自动重试框架
+- RuntimeBindingKey 迁移/版本控制
+- Continuation 管道整合
+
+---
+
 ### Future Milestones (待规划)
 
 以下能力没有明确归属到具体 Milestone，后续根据优先级重新规划：

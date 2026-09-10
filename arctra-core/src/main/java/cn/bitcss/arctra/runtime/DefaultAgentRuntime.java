@@ -5,6 +5,7 @@ import cn.bitcss.arctra.agent.AgentDefinition;
 import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
+import cn.bitcss.arctra.process.ContinuationSignal;
 import java.util.Objects;
 
 /**
@@ -63,5 +64,19 @@ public class DefaultAgentRuntime implements AgentRuntime {
     Objects.requireNonNull(context, "context cannot be null");
 
     return engine.execute(definition, request, context);
+  }
+
+  @Override
+  public AgentResult resumeProcess(
+      String processId, long checkpointVersion, ContinuationSignal signal) {
+    Objects.requireNonNull(processId, "processId cannot be null");
+    Objects.requireNonNull(signal, "signal cannot be null");
+
+    if (!(engine instanceof DurableExecutionEngine durable)) {
+      throw new UnsupportedOperationException(
+          "Engine does not support durable recovery: " + engine.getClass().getName());
+    }
+
+    return durable.resumeProcess(processId, checkpointVersion, signal);
   }
 }

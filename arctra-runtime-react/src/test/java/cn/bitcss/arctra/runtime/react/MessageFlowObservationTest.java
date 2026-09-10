@@ -82,6 +82,12 @@ class MessageFlowObservationTest {
               new AssistantMessage("Done"))));
         }
       }
+
+      @Override
+      public org.springframework.ai.chat.prompt.ChatOptions getOptions() {
+        // Return ToolCallingChatOptions so Spring AI can inject tools
+        return org.springframework.ai.model.tool.ToolCallingChatOptions.builder().build();
+      }
     };
 
     // Tool - using ToolCallback interface

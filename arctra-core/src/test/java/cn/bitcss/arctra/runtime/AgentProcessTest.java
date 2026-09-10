@@ -213,9 +213,11 @@ class AgentProcessTest {
                 throw new RuntimeException("Simulated failure");
               });
 
+      // M4-T4: Original exception is rethrown unchanged (not wrapped)
       assertThatThrownBy(() -> process.resume(new ApprovalSignal(true, "approved")))
           .isInstanceOf(RuntimeException.class)
-          .hasMessageContaining("Process execution failed");
+          .hasMessage("Simulated failure")  // Original message, not wrapped
+          .hasNoCause();  // Not wrapped
 
       assertThat(process.status()).isEqualTo(ProcessStatus.FAILED);
     }

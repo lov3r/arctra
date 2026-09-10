@@ -1,6 +1,22 @@
 # Arctra 架构文档索引
 
-**最后更新：** 2026-08-18
+**最后更新：** 2026-09-08
+
+---
+
+## 最新架构状态
+
+**当前里程碑：** M4 已完成（2026-09-08）
+
+**最新架构文档：** [M4 Final Architecture](./M4-FINAL-ARCHITECTURE.md)
+
+**M4 核心成就：**
+- AgentProcess 生命周期（WAITING/RUNNING/COMPLETED/FAILED）
+- Dynamic Materialization（仅在需要时创建 Process）
+- Tool Governance（ALLOW/DENY/REQUIRE_APPROVAL）
+- 人工在环批准与悬挂/恢复
+- 会话内存跨悬挂/恢复正确性
+- 完整失败语义
 
 ---
 
@@ -16,12 +32,40 @@
 - Spring AI 的镜像包装层
 
 **Arctra 是：**
-- 基于 Spring AI 基础能力的 **Agent Runtime / Agent Platform**
+- 基于 Spring AI 的 **Agent Engineering Harness / Runtime Foundation**
 - 专注于 Agent 生命周期、治理、可观测性和企业集成
 
 ---
 
 ## 文档列表
+
+### 0. [M4 Final Architecture](./M4-FINAL-ARCHITECTURE.md) ⭐️
+
+**核心问题：** M4 建立了什么架构基础？
+
+**主要内容：**
+- M4 冻结的 15 条架构不变式
+- Agent vs Process vs Session 语义
+- Dynamic Materialization 契约
+- Tool Governance 批量语义
+- Spring AI 所有权边界
+- Process 失败语义
+- 已知 M4 限制
+- 公共 API 清单
+- M3 → M4 架构增量
+
+**适用场景：**
+- 理解 Arctra 当前架构状态
+- 开始 M5 规划前必读
+- 评估新特性是否与 M4 契约冲突
+
+**关键原则：**
+> Agent 是无状态的可重用句柄。  
+> AgentProcess 表示跨同步边界的任务执行生命周期。  
+> Process 和 Session 是独立的标识。  
+> WAITING 是 Process 状态，不是 Assistant 内容。
+
+---
 
 ### 1. [Architecture Evolution Guide](./EVOLUTION-GUIDE.md)
 

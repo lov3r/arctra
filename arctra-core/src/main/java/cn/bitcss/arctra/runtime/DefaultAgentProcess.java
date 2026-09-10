@@ -12,24 +12,26 @@ import java.util.function.Function;
 /**
  * Default implementation of AgentProcess.
  *
- * <p>Package-private implementation for in-memory process lifecycle management.
+ * <p>Package-private implementation for process lifecycle management. Supports both ephemeral (M4
+ * in-memory) and durable (M5 checkpoint-backed) suspension strategies through the {@link
+ * ResumeStrategy} abstraction.
  *
- * <h2>M4 Implementation Strategy</h2>
+ * <h2>Stable Identity</h2>
  *
- * <p>This implementation uses Java closure (Function) to capture continuation state. This is a
- * pragmatic choice valid for M4's in-memory-only lifecycle scope. The closure can capture any
- * execution context needed for resumption (definition, request, context, pending actions, etc.).
+ * <p>processId remains stable across the entire task execution lifecycle. Re-suspension transitions
+ * the same AgentProcess back to WAITING with updated strategy, rather than creating a new process.
+ * This ensures that one task execution has one processId for audit, replay, and governance
+ * purposes.
  *
- * <p><strong>Stable Identity:</strong> processId remains stable across the entire task execution
- * lifecycle. Re-suspension transitions the same AgentProcess back to WAITING with updated
- * continuation, rather than creating a new process. This ensures that one task execution has one
- * processId for audit, replay, and governance purposes.
+ * <h2>Two-Phase Resume Protocol</h2>
  *
- * <p><strong>Limitation:</strong> Closure-based state is not serializable and cannot survive JVM
- * restart. Future persistent process implementations (M5+) will require explicit serializable state
- * representation (e.g., ProcessState record). The migration path is clear: the public {@link
- * AgentProcess} API does not expose the closure, so internal implementation can evolve from
- * closure-based to state-based without breaking external consumers.
+ * <ol>
+ *   <li><strong>prepare</strong> - Strategy creates lightweight immutable ResumeAttempt
+ *   <li><strong>CAS</strong> - Atomic WAITING → RUNNING transition (single consumer protection)
+ *   <li><strong>execute</strong> - Actual execution with potential external side effects
+ * </ol>
+ *
+ * <p>This ensures external side effects only occur after local process ownership is established.
  *
  * <h2>Thread Safety</h2>
  *
@@ -42,19 +44,42 @@ class DefaultAgentProcess implements AgentProcess {
 
   private final String id;
   private final AtomicReference<ProcessStatus> status;
-  private volatile Function<ContinuationSignal, AgentResult> continuationFunction;
+  private volatile ResumeStrategy strategy;
   private volatile AgentResult finalResult;
 
   /**
-   * Create a new suspended process.
+   * Create a new suspended process with continuation function (M4 ephemeral).
    *
    * @param continuationFunction function to execute on resume
    */
   DefaultAgentProcess(Function<ContinuationSignal, AgentResult> continuationFunction) {
     this.id = UUID.randomUUID().toString();
     this.status = new AtomicReference<>(ProcessStatus.WAITING);
-    this.continuationFunction =
-        Objects.requireNonNull(continuationFunction, "continuationFunction cannot be null");
+    this.strategy = new EphemeralResumeStrategy(continuationFunction);
+    this.finalResult = null;
+  }
+
+  /**
+   * Create a new suspended process with stable ID and resume strategy.
+   *
+   * <p>Package-private factory method for creating processes with explicit ID and strategy,
+   * primarily for durable suspension where processId is generated externally.
+   *
+   * @param processId stable process identifier
+   * @param strategy resume strategy
+   * @return new process with given ID and strategy
+   */
+  static DefaultAgentProcess withStrategy(String processId, ResumeStrategy strategy) {
+    return new DefaultAgentProcess(processId, strategy);
+  }
+
+  /**
+   * Private constructor for withStrategy factory.
+   */
+  private DefaultAgentProcess(String processId, ResumeStrategy strategy) {
+    this.id = Objects.requireNonNull(processId, "processId cannot be null");
+    this.status = new AtomicReference<>(ProcessStatus.WAITING);
+    this.strategy = Objects.requireNonNull(strategy, "strategy cannot be null");
     this.finalResult = null;
   }
 
@@ -72,27 +97,30 @@ class DefaultAgentProcess implements AgentProcess {
   public AgentResult resume(ContinuationSignal signal) {
     Objects.requireNonNull(signal, "signal cannot be null");
 
-    // Atomic transition from WAITING to RUNNING
+    // Phase 1: Prepare (lightweight, no side effects)
+    ResumeAttempt attempt = strategy.prepare(signal);
+
+    // Phase 2: Atomic transition from WAITING to RUNNING
     if (!status.compareAndSet(ProcessStatus.WAITING, ProcessStatus.RUNNING)) {
       throw new IllegalStateException(
           "Cannot resume process in state " + status.get() + " (must be WAITING)");
     }
 
     try {
-      // Execute continuation
-      AgentResult result = continuationFunction.apply(signal);
+      // Phase 3: Execute (external side effects occur here)
+      AgentResult result = attempt.execute();
 
       // Determine final state
       if (result.isSuspended()) {
-        // Re-suspension: extract continuation and transition back to WAITING
-          AgentProcess suspendedProcess = getSuspendedProcess(result);
+        // Re-suspension: extract strategy and transition back to WAITING
+        AgentProcess suspendedProcess = getSuspendedProcess(result);
 
-          // Extract continuation from the new process
+        // Extract strategy from the new process
         if (suspendedProcess instanceof DefaultAgentProcess other) {
-          this.continuationFunction = other.continuationFunction;
+          this.strategy = other.strategy;
         } else {
           throw new IllegalStateException(
-              "Re-suspension must return DefaultAgentProcess for continuation extraction, "
+              "Re-suspension must return DefaultAgentProcess for strategy extraction, "
                   + "got: "
                   + suspendedProcess.getClass().getName());
         }
@@ -110,34 +138,67 @@ class DefaultAgentProcess implements AgentProcess {
         return result;
       }
 
-    } catch (Exception e) {
-      // Failure: transition to FAILED
-      status.set(ProcessStatus.FAILED);
-      throw new RuntimeException("Process execution failed during resume", e);
+    } catch (Throwable t) {
+      // JVM-fatal errors should propagate immediately without marking process as FAILED
+      if (t instanceof VirtualMachineError || t instanceof ThreadDeath) {
+        throw t;
+      }
+
+      // M5-T4 Phase 6: Exception lifecycle based on strategy validity
+      //
+      // ResumePreparationException: Retryable preparation failure
+      // - CHECK A passed, binding resolution failed
+      // - No tool/model execution, no CHECK B
+      // - Checkpoint unchanged, same (processId, version) remains valid
+      // - Local handle remains usable → WAITING
+      //
+      // All other exceptions: Terminal local failure → FAILED
+      // - StaleCheckpointException: local handle holds stale version
+      // - CheckpointNotFoundException: no backing checkpoint exists
+      // - CheckpointTransitionConflictException: lost CHECK B race, handle stale
+      // - Tool/model/backend failures: execution side effects may have occurred
+      //
+      // CRITICAL: FAILED here means "local handle unusable", NOT necessarily
+      // global logical process failure. Checkpoint is authoritative.
+      if (t instanceof cn.bitcss.arctra.runtime.ResumePreparationException) {
+        // Retryable preparation failure - checkpoint unchanged
+        status.set(ProcessStatus.WAITING);
+      } else {
+        // Terminal local failure - handle unusable
+        // FAILED is terminal - process cannot be resumed again
+        status.set(ProcessStatus.FAILED);
+      }
+
+      // Rethrow original exception unchanged
+      if (t instanceof RuntimeException) {
+        throw (RuntimeException) t;
+      } else {
+        throw (Error) t;
+      }
     }
   }
 
-    private AgentProcess getSuspendedProcess(AgentResult result) {
-        AgentProcess suspendedProcess = result.process();
+  private AgentProcess getSuspendedProcess(AgentResult result) {
+    AgentProcess suspendedProcess = result.process();
 
-        if (suspendedProcess == null) {
-          throw new IllegalStateException(
-              "Suspended AgentResult must contain process (internal contract violation)");
-        }
-
-        // Re-suspension must return different process (with new continuation)
-        // Returning 'this' indicates a bug: re-suspension by definition requires
-        // entering a new phase with new continuation logic, not retrying the same phase
-        if (suspendedProcess == this) {
-          throw new IllegalStateException(
-              "Re-suspension cannot return same process - each suspension requires new continuation. "
-                  + "Returning 'this' indicates a bug in continuation logic. "
-                  + "Retry logic should be external to suspension mechanism.");
-        }
-        return suspendedProcess;
+    if (suspendedProcess == null) {
+      throw new IllegalStateException(
+          "Suspended AgentResult must contain process (internal contract violation)");
     }
 
-    @Override
+    // Re-suspension must return different process (with new strategy)
+    // Returning 'this' indicates a bug: re-suspension by definition requires
+    // entering a new phase with new strategy logic, not retrying the same phase
+    if (suspendedProcess == this) {
+      throw new IllegalStateException(
+          "Re-suspension cannot return same process - each suspension requires new strategy. "
+              + "Returning 'this' indicates a bug in continuation logic. "
+              + "Retry logic should be external to suspension mechanism.");
+    }
+    return suspendedProcess;
+  }
+
+  @Override
   public AgentResult result() {
     if (status.get() != ProcessStatus.COMPLETED) {
       throw new IllegalStateException(

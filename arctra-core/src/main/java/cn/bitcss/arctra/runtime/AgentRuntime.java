@@ -5,6 +5,7 @@ import cn.bitcss.arctra.agent.AgentDefinition;
 import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
+import cn.bitcss.arctra.process.ContinuationSignal;
 
 /**
  * Agent runtime for creating agent handles and executing agents.
@@ -123,4 +124,40 @@ public interface AgentRuntime {
   default AgentResult execute(AgentDefinition definition, AgentRequest request) {
     return execute(definition, request, AgentExecutionContext.stateless());
   }
+
+  /**
+   * Resume durable suspended process (M5 cross-runtime recovery).
+   *
+   * <p>Entry point for resuming checkpoint-backed durable suspended processes across runtime/JVM
+   * boundaries. Caller does NOT need to hold the original Java {@link
+   * cn.bitcss.arctra.process.AgentProcess} handle - recovery is based purely on durable checkpoint
+   * state.
+   *
+   * <p><strong>Requires durable-capable engine:</strong> The underlying {@link
+   * AgentExecutionEngine} must implement {@link DurableExecutionEngine}. If not, this method throws
+   * {@link UnsupportedOperationException}.
+   *
+   * <p><strong>processId semantics:</strong> Stable logical process identifier that remains
+   * constant across the entire execution lifecycle. Generated during initial durable suspension and
+   * persisted in checkpoint.
+   *
+   * <p><strong>checkpointVersion semantics:</strong> Suspension episode version serving as fencing
+   * token for optimistic concurrency control. Increments on each re-suspension (v1, v2, v3, ...).
+   * Used by durable engine for CHECK A/B validation.
+   *
+   * <p><strong>This method is pure delegation:</strong> Does NOT perform checkpoint loading,
+   * version validation, binding resolution, or orchestration logic. All durable recovery pipeline
+   * logic lives in {@link DurableExecutionEngine#resumeProcess}.
+   *
+   * @param processId stable process identifier (from checkpoint)
+   * @param checkpointVersion suspension episode version (fencing token)
+   * @param signal continuation signal (approval/rejection decision)
+   * @return execution result (may be suspended again with incremented version)
+   * @throws UnsupportedOperationException if engine does not implement {@link
+   *     DurableExecutionEngine}
+   * @throws NullPointerException if processId or signal is null
+   * @since M5-T4
+   */
+  AgentResult resumeProcess(
+      String processId, long checkpointVersion, ContinuationSignal signal);
 }

@@ -377,12 +377,12 @@ class AgentProcessLifecycleTest {
 
       assertThat(process.status()).isEqualTo(ProcessStatus.WAITING);
 
-      // Resume should fail and transition to FAILED
-      // DefaultAgentProcess wraps continuation failure in RuntimeException
+      // M4-T4: Resume fails and transitions to FAILED
+      // Original exception is rethrown unchanged (not wrapped)
       assertThatThrownBy(() -> process.resume(new ApprovalSignal(true, "approved")))
           .isInstanceOf(RuntimeException.class)
-          .hasMessageContaining("Process execution failed during resume")
-          .hasCauseInstanceOf(RuntimeException.class);
+          .hasMessage("Simulated continuation failure")  // Original message
+          .hasNoCause();  // Not wrapped
 
       assertThat(process.status()).isEqualTo(ProcessStatus.FAILED);
     }
