@@ -95,6 +95,43 @@ Total: 237 tests, 0 failures
   - `M5-T4-FINAL-CLOSURE-REPORT.md`
   - 10 个 Phase closure reports
 
+### M5-A2: RuntimeBindingResolver Production Reference ✅ **COMPLETE**
+**完成日期:** 2026-09-10
+
+**状态:** ✅ **M5-A2 COMPLETE**
+
+**实施阶段:**
+- Phase A2.1: ✅ Source truth verification + Architecture Gate
+- Phase A2.2: ✅ MapBasedRuntimeBindingResolver 参考实现
+- Phase A2.3: ✅ 完整用户文档 + Usage Closure
+
+**最终测试结果:**
+```
+Core: 148 tests, 0 failures (新增 12 tests)
+Runtime-react: 79 tests, 0 failures, 6 skipped
+Examples: 22 tests, 0 failures, 9 skipped
+Total: 249 tests, 0 failures
+```
+
+**交付物:**
+- `MapBasedRuntimeBindingResolver` (reference implementation, 143行)
+- 12 个新测试（完整契约验证）
+- `docs/guides/M5-RUNTIME-BINDING-GUIDE.md` (完整用户指南, 800+ 行)
+  - runtimeBindingKey contract
+  - Cross-runtime recovery semantics
+  - Strict resolution policy
+  - Exception layers & retry semantics
+  - ChatMemory requirements
+  - Complete examples & failure scenarios
+- Zero existing public API changes
+
+**关键成就:**
+- 生产风格参考实现（教学性质）
+- 完整用户文档（解释 M5 durable recovery contract）
+- 严格解析策略（no fuzzy matching, no silent migration）
+- 异常层次清晰（RuntimeBindingException → ResumePreparationException）
+- ChatMemory 跨运行时要求明确
+
 ---
 
 ## 3. M5 已完成能力

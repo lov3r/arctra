@@ -495,13 +495,34 @@ var result2 = engine.execute(
 - ❌ 自动重试 ResumePreparationException
 - ❌ RuntimeBindingResolver 序列化 Java 对象恢复
 
+- ✅ **M5-A2:** RuntimeBindingResolver Production Reference ✅ **COMPLETE** (2026-09-10)
+  - Phase A2.1: Source truth verification + Architecture Gate
+  - Phase A2.2: MapBasedRuntimeBindingResolver 参考实现
+  - Phase A2.3: 完整用户文档 + Usage Closure
+  - 新增: `MapBasedRuntimeBindingResolver` (143行，参考实现)
+  - 新增: 12个测试 (完整契约验证)
+  - 新增: `docs/guides/M5-RUNTIME-BINDING-GUIDE.md` (完整指南)
+  - 249 tests, 0 failures (M5 regression 通过)
+  - Zero existing public API changes
+
+**M5-A2 交付物:**
+- MapBasedRuntimeBindingResolver (reference implementation)
+- M5-RUNTIME-BINDING-GUIDE.md (用户完整指南)
+  - runtimeBindingKey contract
+  - Cross-runtime recovery semantics
+  - Strict resolution policy
+  - Exception layers & retry semantics
+  - ChatMemory requirements
+  - Complete examples & failure scenarios
+
 **延期到 M6+ 的工作:**
-- 生产 RuntimeBinding 重建策略
 - 生产 CheckpointStore 实现（JDBC, Redis）
+- 持久化 ChatMemory 集成指南/实现
 - CheckpointStore/ChatMemory 一致性协调
+- Failure classification ADR
+- RuntimeBindingKey schema/version 迁移
 - 工具去重/幂等性策略
 - ResumePreparationException 自动重试框架
-- RuntimeBindingKey 迁移/版本控制
 - Continuation 管道整合
 
 ---

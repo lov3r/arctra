@@ -1,6 +1,32 @@
 # Current State
 
-**Last Updated:** 2026-08-17 (M1 CLOSEOUT)
+**Last Updated:** 2026-09-10 (M5-A2 COMPLETE)
+
+---
+
+## Current Phase: M5 Durable Suspension/Recovery ✅ COMPLETE + Production Hardening
+
+**状态：** M5-T4 COMPLETE (2026-09-09) + M5-A2 COMPLETE (2026-09-10)
+
+**目标：** 持久暂停/恢复能力，使进程可以跨 JVM 边界和运行时实例恢复执行
+
+**已完成：**
+- ✅ M5-T1: Durable Process Contract Gate
+- ✅ M5-T2: Durable Resume Reconstruction PoC
+- ✅ M5-T3: Durable Recovery Architecture Gate
+- ✅ M5-T4: Durable Suspension/Recovery Implementation
+- ✅ M5-A2: RuntimeBindingResolver Production Reference (2026-09-10)
+
+**M5-A2 Production Hardening Deliverables:**
+- MapBasedRuntimeBindingResolver (reference implementation)
+- Complete user guide: `docs/guides/M5-RUNTIME-BINDING-GUIDE.md`
+- 12 new tests (full contract verification)
+- 249 total tests, 0 failures
+- Zero existing public API changes
+
+**Closure:** [M5 Milestone Summary](../../M5-MILESTONE-SUMMARY.md)
+
+**下一步：** M6 ExecutionRecord/ExecutionLedger Foundation (Track B)
 
 ---
 

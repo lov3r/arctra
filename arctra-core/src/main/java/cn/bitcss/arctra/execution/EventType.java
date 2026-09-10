@@ -47,14 +47,61 @@ public enum EventType {
   /**
    * Human granted approval for pending tool execution.
    *
-   * <p>Signals continuation with APPROVE signal.
+   * <p><strong>Domain commit point:</strong> An APPROVED continuation signal has been validated
+   * against the current checkpoint episode, after CHECK A passed and RuntimeBinding successfully
+   * resolved. At this point, the approval decision is semantically confirmed, independent of
+   * whether the ExecutionRecord is successfully persisted.
+   *
+   * <p><strong>Conditions for domain fact to become TRUE:</strong>
+   * <ol>
+   *   <li>CHECK A: checkpoint version validated as current
+   *   <li>RuntimeBinding: execution binding successfully reconstructed
+   *   <li>ContinuationSignal: APPROVED signal validated/accepted for current checkpoint
+   * </ol>
+   *
+   * <p><strong>Ledger projection:</strong> After the approval fact becomes true, the framework
+   * attempts to persist an ExecutionRecord. If ledger append fails, the approval decision remains
+   * semantically true (the human did approve), but the audit trail has a gap.
+   *
+   * <p><strong>Failure scenarios:</strong>
+   * <ul>
+   *   <li>CHECK A fails → approval fact never becomes true, no ledger append
+   *   <li>RuntimeBinding fails → approval fact never becomes true, no ledger append
+   *   <li>Ledger append fails → approval fact is TRUE, audit trail incomplete
+   * </ul>
+   *
+   * <p><strong>Audit-critical:</strong> If ledger append fails, subsequent execution behavior
+   * depends on policy. The domain fact remains true regardless.
    */
   APPROVAL_GRANTED,
 
   /**
    * Human rejected pending tool execution.
    *
-   * <p>Signals continuation with REJECT signal.
+   * <p><strong>Domain commit point:</strong> A REJECTED continuation signal has been validated
+   * against the current checkpoint episode, after CHECK A passed and RuntimeBinding successfully
+   * resolved. At this point, the rejection decision is semantically confirmed, independent of
+   * whether the ExecutionRecord is successfully persisted.
+   *
+   * <p><strong>Conditions for domain fact to become TRUE:</strong>
+   * <ol>
+   *   <li>CHECK A: checkpoint version validated as current
+   *   <li>RuntimeBinding: execution binding successfully reconstructed
+   *   <li>ContinuationSignal: REJECTED signal validated/accepted for current checkpoint
+   * </ol>
+   *
+   * <p><strong>Ledger projection:</strong> After the rejection fact becomes true, the framework
+   * attempts to persist an ExecutionRecord. If ledger append fails, the rejection decision remains
+   * semantically true, but the audit trail has a gap.
+   *
+   * <p><strong>Failure scenarios:</strong>
+   * <ul>
+   *   <li>CHECK A fails → rejection fact never becomes true, no ledger append
+   *   <li>RuntimeBinding fails → rejection fact never becomes true, no ledger append
+   *   <li>Ledger append fails → rejection fact is TRUE, audit trail incomplete
+   * </ul>
+   *
+   * <p><strong>Audit-critical:</strong> Append failure handling is symmetric with APPROVAL_GRANTED.
    */
   APPROVAL_REJECTED,
 
@@ -71,7 +118,36 @@ public enum EventType {
   /**
    * Process resumed from checkpoint.
    *
-   * <p><strong>Precise semantics:</strong> Checkpoint loaded and CHECK A validation passed.
+   * <p><strong>Domain commit point:</strong> The durable continuation environment has been
+   * successfully prepared from the current checkpoint. CHECK A passed, RuntimeBinding resolved,
+   * approval decision confirmed (approved or rejected), and control is ready to enter the resumed
+   * execution path. At this point, resume has semantically occurred, independent of whether the
+   * ExecutionRecord is successfully persisted.
+   *
+   * <p><strong>Conditions for domain fact to become TRUE:</strong>
+   * <ol>
+   *   <li>CHECK A: checkpoint version validated as current
+   *   <li>RuntimeBinding: execution binding successfully reconstructed
+   *   <li>Approval decision: APPROVAL_GRANTED or APPROVAL_REJECTED semantic decision confirmed
+   *       (not "recorded" — the decision exists as a domain fact)
+   *   <li>Continuation environment prepared and ready to enter resumed execution
+   * </ol>
+   *
+   * <p><strong>Ledger projection:</strong> After the resume fact becomes true, the framework
+   * attempts to persist an ExecutionRecord. If ledger append fails, the resume operation remains
+   * semantically true (runtime continuation did begin), but the audit trail has a gap.
+   *
+   * <p><strong>Failure scenarios:</strong>
+   * <ul>
+   *   <li>CHECK A fails → resume fact never becomes true, no ledger append
+   *   <li>RuntimeBinding fails → resume fact never becomes true, no ledger append
+   *   <li>Ledger append fails → resume fact is TRUE, audit trail incomplete
+   * </ul>
+   *
+   * <p><strong>Distinction from APPROVAL_GRANTED/REJECTED:</strong> Approval events represent
+   * the governance decision. RESUMED represents the technical runtime continuation beginning.
+   * RESUMED depends on the approval decision existing (as a domain fact), not on the approval
+   * decision being successfully recorded in the ledger.
    */
   RESUMED,
 

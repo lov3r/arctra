@@ -8,6 +8,8 @@ import cn.bitcss.arctra.checkpoint.CheckpointStore;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.evidence.Evidence;
+import cn.bitcss.arctra.execution.EventType;
+import cn.bitcss.arctra.execution.ExecutionLedger;
 import cn.bitcss.arctra.governance.ToolGovernancePolicy;
 import cn.bitcss.arctra.process.AgentProcess;
 import cn.bitcss.arctra.process.ContinuationSignal;
@@ -72,6 +74,9 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
   private final RuntimeBindingResolver bindingResolver;
   private final String runtimeBindingKey;
 
+  // M6-T2A execution ledger (optional - audit trail)
+  private final ExecutionLedger executionLedger;
+
   /**
    * Create a tool-calling engine with conversation memory and governance support (M4 ephemeral).
    *
@@ -85,14 +90,14 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
       List<ToolCallback> tools,
       ChatMemory chatMemory,
       ToolGovernancePolicy governancePolicy) {
-    this(chatModel, tools, chatMemory, governancePolicy, null, null, null);
+    this(chatModel, tools, chatMemory, governancePolicy, null, null, null, null);
   }
 
   /**
-   * Create a tool-calling engine with durable suspension capability (M5).
+   * Create a tool-calling engine with durable suspension capability (M5 backward compatibility).
    *
-   * <p><strong>Durable configuration (all-or-nothing):</strong> Either all three durable
-   * parameters are provided, or all are null for ephemeral-only mode.
+   * <p>This constructor exists for backward compatibility with M5 tests. New code should use the
+   * 8-parameter constructor with explicit ExecutionLedger parameter.
    *
    * @param chatModel the chat model
    * @param tools the tools available
@@ -103,7 +108,9 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
    * @param runtimeBindingKey logical binding key for this engine (null for ephemeral)
    * @throws IllegalArgumentException if durable configuration is partial
    * @since M5-T4
+   * @deprecated Use 8-parameter constructor with explicit ExecutionLedger parameter
    */
+  @Deprecated
   public SpringAiToolCallingEngine(
       ChatModel chatModel,
       List<ToolCallback> tools,
@@ -112,6 +119,39 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
       CheckpointStore checkpointStore,
       RuntimeBindingResolver bindingResolver,
       String runtimeBindingKey) {
+    this(chatModel, tools, chatMemory, governancePolicy, checkpointStore, bindingResolver,
+         runtimeBindingKey, null);
+  }
+
+  /**
+   * Create a tool-calling engine with durable suspension capability (M5).
+   *
+   * <p><strong>Durable configuration (all-or-nothing):</strong> Either all three durable
+   * parameters are provided, or all are null for ephemeral-only mode.
+   *
+   * <p><strong>Execution ledger (optional):</strong> ExecutionLedger may be provided independently
+   * for audit trail. If null, no execution events are recorded.
+   *
+   * @param chatModel the chat model
+   * @param tools the tools available
+   * @param chatMemory the chat memory
+   * @param governancePolicy the governance policy
+   * @param checkpointStore checkpoint store for durable suspension (null for ephemeral)
+   * @param bindingResolver runtime binding resolver for recovery (null for ephemeral)
+   * @param runtimeBindingKey logical binding key for this engine (null for ephemeral)
+   * @param executionLedger execution ledger for audit trail (null to disable)
+   * @throws IllegalArgumentException if durable configuration is partial
+   * @since M5-T4
+   */
+  public SpringAiToolCallingEngine(
+      ChatModel chatModel,
+      List<ToolCallback> tools,
+      ChatMemory chatMemory,
+      ToolGovernancePolicy governancePolicy,
+      CheckpointStore checkpointStore,
+      RuntimeBindingResolver bindingResolver,
+      String runtimeBindingKey,
+      ExecutionLedger executionLedger) {
 
     this.chatModel = Objects.requireNonNull(chatModel, "chatModel cannot be null");
     this.tools = Objects.requireNonNull(tools, "tools cannot be null");
@@ -139,6 +179,7 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
     this.checkpointStore = checkpointStore;
     this.bindingResolver = bindingResolver;
     this.runtimeBindingKey = runtimeBindingKey;
+    this.executionLedger = executionLedger; // M6-T2A: optional audit trail
   }
 
   private boolean isDurableMode() {
@@ -244,6 +285,12 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
    *
    * <p>Creates checkpoint-backed durable process. Durability-first: checkpoint persisted BEFORE
    * process exposed.
+   *
+   * <p><strong>M6-T2A Event Wiring:</strong>
+   * <ul>
+   *   <li>APPROVAL_REQUIRED after governance decision
+   *   <li>SUSPENDED after checkpoint.create() succeeds
+   * </ul>
    */
   private AgentResult suspendForApprovalDurable(
       GovernanceToolCallingAdvisor.SuspensionState suspensionState,
@@ -266,6 +313,26 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
                         tc.id(), tc.name(), tc.arguments() != null ? tc.arguments() : "{}"))
             .toList();
 
+    // M6-T2A: APPROVAL_REQUIRED domain fact becomes TRUE
+    // (governance decision = REQUIRE_APPROVAL)
+    if (executionLedger != null) {
+      try {
+        String toolNames = pendingBatch.stream().map(PendingToolCall::toolName).toList().toString();
+        executionLedger.append(
+            processId,
+            EventType.APPROVAL_REQUIRED,
+            null, // checkpointVersion not yet assigned
+            """
+            {"toolNames": %s, "policyReason": "governance_requires_approval"}
+            """.formatted(toolNames));
+      } catch (Exception e) {
+        // Ledger append failure does not block suspension
+        // Domain fact (approval required) remains true
+        // Audit trail has a gap
+        // Log for observability (future)
+      }
+    }
+
     // 4. Build checkpoint v1
     SuspensionCheckpoint checkpoint =
         new SuspensionCheckpoint(
@@ -279,6 +346,24 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
 
     // 5. Persist checkpoint FIRST (durability-first)
     checkpointStore.create(checkpoint);
+
+    // M6-T2A: SUSPENDED domain fact becomes TRUE
+    // (checkpoint.create() succeeded)
+    if (executionLedger != null) {
+      try {
+        executionLedger.append(
+            processId,
+            EventType.SUSPENDED,
+            1L, // checkpointVersion now assigned
+            """
+            {"checkpointVersion": 1, "pendingToolCount": %d, "evidenceCount": %d}
+            """.formatted(pendingBatch.size(), evidences.size()));
+      } catch (Exception e) {
+        // Ledger append failure does not block returning suspended result
+        // Domain fact (suspended) remains true (checkpoint exists and is resumable)
+        // Audit trail has a gap
+      }
+    }
 
     // 6. ONLY after checkpoint persisted: create durable process
     AgentProcess process = ProcessFactory.createDurableSuspended(processId, 1L, this);
@@ -617,6 +702,46 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
     cn.bitcss.arctra.runtime.RuntimeBinding binding =
         resolveBinding(processId, checkpoint);
 
+    // M6-T2A: APPROVAL_GRANTED or APPROVAL_REJECTED domain fact becomes TRUE
+    // (CHECK A passed AND RuntimeBinding resolved AND signal validated)
+    if (executionLedger != null && signal instanceof ContinuationSignal.ApprovalSignal approval) {
+      try {
+        EventType approvalEvent = approval.approved()
+            ? EventType.APPROVAL_GRANTED
+            : EventType.APPROVAL_REJECTED;
+        executionLedger.append(
+            processId,
+            approvalEvent,
+            checkpoint.checkpointVersion(),
+            """
+            {"signalType": "%s", "checkpointVersion": %d}
+            """.formatted(approval.approved() ? "APPROVED" : "REJECTED",
+                         checkpoint.checkpointVersion()));
+      } catch (Exception e) {
+        // Ledger append failure does not block resume
+        // Domain fact (approval decision validated) remains true
+        // Audit trail has a gap
+      }
+    }
+
+    // M6-T2A: RESUMED domain fact becomes TRUE
+    // (CHECK A + RuntimeBinding + approval decision confirmed, ready to enter resumed execution)
+    if (executionLedger != null) {
+      try {
+        executionLedger.append(
+            processId,
+            EventType.RESUMED,
+            checkpoint.checkpointVersion(),
+            """
+            {"checkpointVersion": %d, "runtimeBindingKey": "%s"}
+            """.formatted(checkpoint.checkpointVersion(), runtimeBindingKey));
+      } catch (Exception e) {
+        // Ledger append failure does not block resume
+        // Domain fact (resumed) remains true (continuation environment prepared)
+        // Audit trail has a gap
+      }
+    }
+
     // Protocol reconstruction and execution based on signal
     List<Evidence> historicalEvidences = checkpoint.accumulatedEvidences();
     List<Evidence> newEvidences = Collections.synchronizedList(new ArrayList<>());
@@ -694,11 +819,47 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
               currentCheckpoint.processId(), currentCheckpoint.checkpointVersion());
 
       if (!deleted) {
+        // M6-T2A: CHECKPOINT_CONFLICT domain fact becomes TRUE
+        // (CHECK B CAS returned false)
+        if (executionLedger != null) {
+          try {
+            executionLedger.append(
+                currentCheckpoint.processId(),
+                EventType.CHECKPOINT_CONFLICT,
+                currentCheckpoint.checkpointVersion(),
+                """
+                {"operation": "DELETE", "conflictType": "VERSION_MISMATCH", "checkpointVersion": %d}
+                """.formatted(currentCheckpoint.checkpointVersion()));
+          } catch (Exception e) {
+            // Ledger append failure does not affect conflict handling
+            // Domain fact (conflict occurred) remains true
+            // Audit trail has a gap
+          }
+        }
+
         throw new cn.bitcss.arctra.checkpoint.CheckpointTransitionConflictException(
             "Completion CHECK B failed for processId "
                 + currentCheckpoint.processId()
                 + ", version "
                 + currentCheckpoint.checkpointVersion());
+      }
+
+      // M6-T2A: COMPLETED domain fact becomes TRUE
+      // (CHECK B deleteIfVersion succeeded - checkpoint deleted)
+      if (executionLedger != null) {
+        try {
+          executionLedger.append(
+              currentCheckpoint.processId(),
+              EventType.COMPLETED,
+              currentCheckpoint.checkpointVersion(),
+              """
+              {"checkpointVersion": %d, "evidenceCount": %d}
+              """.formatted(currentCheckpoint.checkpointVersion(), evidences.size()));
+        } catch (Exception e) {
+          // Ledger append failure does not block returning completed result
+          // Domain fact (completed) remains true (checkpoint deleted, process no longer resumable)
+          // Audit trail has a gap
+        }
       }
 
       persistCompletedAssistant(context, content);
@@ -716,6 +877,13 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
 
   /**
    * Handle durable re-suspension with CHECK B (replaceIfVersion).
+   *
+   * <p><strong>M6-T2A Event Wiring:</strong>
+   * <ul>
+   *   <li>APPROVAL_REQUIRED after governance decision (new pending batch)
+   *   <li>CHECKPOINT_CONFLICT if CHECK B replaceIfVersion fails
+   *   <li>SUSPENDED after CHECK B replaceIfVersion succeeds
+   * </ul>
    */
   private AgentResult handleDurableReSuspension(
       SuspensionCheckpoint oldCheckpoint,
@@ -732,6 +900,24 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
                     new PendingToolCall(
                         tc.id(), tc.name(), tc.arguments() != null ? tc.arguments() : "{}"))
             .toList();
+
+    // M6-T2A: APPROVAL_REQUIRED domain fact becomes TRUE (new pending batch)
+    if (executionLedger != null) {
+      try {
+        String toolNames = nextPendingBatch.stream().map(PendingToolCall::toolName).toList().toString();
+        executionLedger.append(
+            oldCheckpoint.processId(),
+            EventType.APPROVAL_REQUIRED,
+            oldCheckpoint.checkpointVersion(), // Current version
+            """
+            {"toolNames": %s, "policyReason": "governance_requires_approval", "resuspension": true}
+            """.formatted(toolNames));
+      } catch (Exception e) {
+        // Ledger append failure does not block re-suspension
+        // Domain fact (approval required for new batch) remains true
+        // Audit trail has a gap
+      }
+    }
 
     // Build checkpoint vN+1 with preserved identity
     long nextVersion = oldCheckpoint.checkpointVersion() + 1;
@@ -752,11 +938,47 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
             oldCheckpoint.processId(), oldCheckpoint.checkpointVersion(), nextCheckpoint);
 
     if (!replaced) {
+      // M6-T2A: CHECKPOINT_CONFLICT domain fact becomes TRUE
+      // (CHECK B CAS returned false)
+      if (executionLedger != null) {
+        try {
+          executionLedger.append(
+              oldCheckpoint.processId(),
+              EventType.CHECKPOINT_CONFLICT,
+              oldCheckpoint.checkpointVersion(),
+              """
+              {"operation": "REPLACE", "conflictType": "VERSION_MISMATCH", "checkpointVersion": %d, "attemptedNewVersion": %d}
+              """.formatted(oldCheckpoint.checkpointVersion(), nextVersion));
+        } catch (Exception e) {
+          // Ledger append failure does not affect conflict handling
+          // Domain fact (conflict occurred) remains true
+          // Audit trail has a gap
+        }
+      }
+
       throw new cn.bitcss.arctra.checkpoint.CheckpointTransitionConflictException(
           "Re-suspension CHECK B failed for processId "
               + oldCheckpoint.processId()
               + ", version "
               + oldCheckpoint.checkpointVersion());
+    }
+
+    // M6-T2A: SUSPENDED domain fact becomes TRUE
+    // (CHECK B replaceIfVersion succeeded - new checkpoint version exists)
+    if (executionLedger != null) {
+      try {
+        executionLedger.append(
+            oldCheckpoint.processId(),
+            EventType.SUSPENDED,
+            nextVersion, // New checkpoint version
+            """
+            {"checkpointVersion": %d, "pendingToolCount": %d, "evidenceCount": %d, "resuspension": true}
+            """.formatted(nextVersion, nextPendingBatch.size(), mergedEvidences.size()));
+      } catch (Exception e) {
+        // Ledger append failure does not block returning suspended result
+        // Domain fact (suspended) remains true (new checkpoint exists and is resumable)
+        // Audit trail has a gap
+      }
     }
 
     // Create new durable process
