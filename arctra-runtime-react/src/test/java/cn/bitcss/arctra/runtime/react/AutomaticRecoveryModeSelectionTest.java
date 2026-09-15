@@ -172,11 +172,11 @@ class AutomaticRecoveryModeSelectionTest {
   @Test
   @DisplayName("T4F-3: Same-incarnation resume uses normal path (no recovery reads)")
   void sameIncarnation_usesNormalPath() {
-    // Given
+    // Given - recording store with NO intents
     RecordingInvocationStateStore stateStore = new RecordingInvocationStateStore();
     TestCheckpointStore checkpointStore = new TestCheckpointStore();
 
-    // Create checkpoint with current epoch
+    // Create checkpoint with current epoch (SAME incarnation)
     String processId = "proc-test";
     PendingToolCall operation = new PendingToolCall("op-1", "tc-1", "tool-1", "{}");
 
@@ -193,21 +193,44 @@ class AutomaticRecoveryModeSelectionTest {
 
     checkpointStore.create(checkpoint);
 
-    // Create engine with recording state store
-    ChatMemory memory = MessageWindowChatMemory.builder().maxMessages(10).build();
-    AtomicInteger toolCount = new AtomicInteger(0);
+    // Given - runtime binding
+    RuntimeBindingResolver bindingResolver =
+        (pid, bindingKey, sessionId) ->
+            new RuntimeBinding(
+                new AgentDefinition("agent-test", "test"),
+                AgentExecutionContext.withSession(SESSION_ID));
 
-    SpringAiToolCallingEngine engine =
-        createEngineWithStateStore(checkpointStore, stateStore, memory, toolCount);
+    // Given - resumed execution handler that uses the recording state store
+    AtomicInteger toolExecutionCount = new AtomicInteger(0);
+    ResumedExecutionHandler handler = createCountingHandler(toolExecutionCount, stateStore);
 
-    DefaultAgentRuntime runtime = new DefaultAgentRuntime(engine);
+    // Given - recovery classifier with recording state store
+    InvocationRecoveryClassifier classifier = new InvocationRecoveryClassifier(stateStore);
 
-    // When - resume
+    // Given - coordinator
+    DurableResumeCoordinator coordinator =
+        new DurableResumeCoordinator(
+            checkpointStore,
+            bindingResolver,
+            event -> {},
+            handler,
+            createTestEngine(),
+            classifier);
+
+    // When - resume with SAME incarnation
     AgentResult result =
-        runtime.resumeProcess(
-            processId, 1L, new ContinuationSignal.ApprovalSignal(true, "approve"));
+        coordinator.resume(
+            processId,
+            1L,
+            new ContinuationSignal.ApprovalSignal(true, "approve"),
+            ExecutionIncarnation.current()); // Pass current epoch - same as checkpoint
 
-    // Then - NO recovery classification reads
+    // Then - tool was executed
+    assertThat(toolExecutionCount.get())
+        .as("Tool should be executed")
+        .isEqualTo(1);
+
+    // Then - NO recovery classification reads (key assertion for T4F-3)
     assertThat(stateStore.readCalls)
         .as("Same-incarnation resume must NOT read invocation state for recovery classification")
         .isEmpty();
@@ -237,22 +260,6 @@ class AutomaticRecoveryModeSelectionTest {
 
   private static class TestCheckpointStore implements CheckpointStore {
     private final List<SuspensionCheckpoint> checkpoints = new ArrayList<>();
-    private final InvocationStateStore pairedStateStore;
-
-    TestCheckpointStore() {
-      this(null);
-    }
-
-    TestCheckpointStore(InvocationStateStore pairedStateStore) {
-      this.pairedStateStore = pairedStateStore;
-    }
-
-    /**
-     * Expose paired state store for test inspection.
-     */
-    public InvocationStateStore getPairedStateStore() {
-      return pairedStateStore;
-    }
 
     @Override
     public void create(SuspensionCheckpoint checkpoint) {
@@ -339,22 +346,24 @@ class AutomaticRecoveryModeSelectionTest {
             AgentExecutionContext.withSession(sessionId));
   }
 
-  private SpringAiToolCallingEngine createEngineWithStateStore(
-      CheckpointStore checkpointStore,
-      InvocationStateStore stateStore,
-      ChatMemory memory,
-      AtomicInteger toolCount) {
+  private ResumedExecutionHandler createCountingHandler(
+      AtomicInteger executionCount, InvocationStateStore stateStore) {
+    List<ToolCallback> tools = List.of(createTestTool("tool-1", executionCount));
+    ChatModel model = createCompletionModel();
+    ChatMemory memory = MessageWindowChatMemory.builder().maxMessages(10).build();
+    ToolGovernancePolicy policy = (name, args, ctx) -> GovernanceDecision.ALLOW;
 
-    ToolCallback tool = createTestTool("tool-1", toolCount);
-    ChatModel model = new ChatModel() {
+    return new SpringAiResumedExecutionHandler(model, memory, tools, policy, stateStore);
+  }
+
+  private ChatModel createCompletionModel() {
+    return new ChatModel() {
       @Override
       public ChatResponse call(org.springframework.ai.chat.prompt.Prompt prompt) {
         return new ChatResponse(
             List.of(
                 new Generation(
-                    AssistantMessage.builder()
-                        .content("completed")
-                        .build())));
+                    AssistantMessage.builder().content("completed").build())));
       }
 
       @Override
@@ -362,27 +371,14 @@ class AutomaticRecoveryModeSelectionTest {
         return ToolCallingChatOptions.builder().build();
       }
     };
+  }
 
+  private SpringAiToolCallingEngine createTestEngine() {
+    ChatModel model = createCompletionModel();
+    ChatMemory memory = MessageWindowChatMemory.builder().maxMessages(10).build();
     ToolGovernancePolicy policy = (name, args, ctx) -> GovernanceDecision.ALLOW;
-    RuntimeBindingResolver resolver = createTestResolver();
-
-    // Create TestCheckpointStore with paired state store
-    TestCheckpointStore pairedStore = new TestCheckpointStore(stateStore);
-    // Copy existing checkpoints
-    if (checkpointStore instanceof TestCheckpointStore) {
-      TestCheckpointStore existingStore = (TestCheckpointStore) checkpointStore;
-      for (SuspensionCheckpoint cp : existingStore.checkpoints) {
-        pairedStore.create(cp);
-      }
-    }
 
     return new SpringAiToolCallingEngine(
-        model,
-        List.of(tool),
-        memory,
-        policy,
-        pairedStore,
-        resolver,
-        BINDING_KEY);
+        model, List.of(), memory, policy);
   }
 }
