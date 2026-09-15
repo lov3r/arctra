@@ -154,7 +154,7 @@ class InMemoryCheckpointStoreTest {
         version,
         "test-binding-key",
         "session-123",
-        List.of(new PendingToolCall("tc-1", "testTool", "{}")),
+        List.of(new PendingToolCall("test-op-X", "tc-1", "testTool", "{}")),
         List.of());
   }
 }

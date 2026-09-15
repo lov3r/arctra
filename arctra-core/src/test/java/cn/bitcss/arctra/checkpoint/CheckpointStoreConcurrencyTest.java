@@ -38,7 +38,7 @@ class CheckpointStoreConcurrencyTest {
             1L,
             "test-key",
             "session-1",
-            List.of(new PendingToolCall("tc-init", "toolInit", "{}")),
+            List.of(new PendingToolCall("test-op-init", "tc-init", "toolInit", "{}")),
             List.of());
     store.create(initial);
 
@@ -50,7 +50,7 @@ class CheckpointStoreConcurrencyTest {
             2L,
             "test-key",
             "session-1",
-            List.of(new PendingToolCall("tc-1", "toolA", "{}")),
+            List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
             List.of());
 
     SuspensionCheckpoint replacement2 =
@@ -60,7 +60,7 @@ class CheckpointStoreConcurrencyTest {
             2L,
             "test-key",
             "session-1",
-            List.of(new PendingToolCall("tc-2", "toolB", "{}")),
+            List.of(new PendingToolCall("test-op-2", "tc-2", "toolB", "{}")),
             List.of());
 
     // Concurrent execution
@@ -139,7 +139,7 @@ class CheckpointStoreConcurrencyTest {
             1L,
             "test-key",
             "session-1",
-            List.of(new PendingToolCall("tc-init", "toolInit", "{}")),
+            List.of(new PendingToolCall("test-op-init", "tc-init", "toolInit", "{}")),
             List.of());
     store.create(initial);
 
@@ -194,7 +194,7 @@ class CheckpointStoreConcurrencyTest {
             1L,
             "test-key",
             "session-1",
-            List.of(new PendingToolCall("tc-init", "toolInit", "{}")),
+            List.of(new PendingToolCall("test-op-init", "tc-init", "toolInit", "{}")),
             List.of());
     store.create(cp1);
 
@@ -206,7 +206,7 @@ class CheckpointStoreConcurrencyTest {
             2L,
             "test-key",
             "session-1",
-            List.of(new PendingToolCall("tc-2", "toolA", "{}")),
+            List.of(new PendingToolCall("test-op-replaced", "tc-2", "toolA", "{}")),
             List.of());
 
     // Another thread tries stale v1 → v2 (same expected v1)
@@ -217,7 +217,7 @@ class CheckpointStoreConcurrencyTest {
             2L,
             "test-key",
             "session-1",
-            List.of(new PendingToolCall("stale", "stale", "{}")),
+            List.of(new PendingToolCall("test-op-stale", "stale", "stale", "{}")),
             List.of());
 
     CountDownLatch latch = new CountDownLatch(1);

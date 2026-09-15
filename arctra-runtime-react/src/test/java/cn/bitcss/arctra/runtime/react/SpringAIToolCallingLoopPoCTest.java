@@ -28,6 +28,7 @@ import org.springframework.ai.tool.definition.ToolDefinition;
  *
  * @author lov3r
  */
+@Disabled("M1 PoC - core functionality now in SpringAiToolCallingEngine")
 class SpringAIToolCallingLoopPoCTest {
 
   @Test

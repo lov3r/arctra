@@ -89,7 +89,7 @@ class DurableResumeMemoryTest {
             1L,
             "test-key",
             "session-1",
-            List.of(new PendingToolCall("tc-1", "toolA", "{}")),
+            List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
             List.of());
 
     store.checkpoints.put("process-1", checkpoint);
@@ -166,7 +166,7 @@ class DurableResumeMemoryTest {
             1L,
             "test-key",
             "session-1",
-            List.of(new PendingToolCall("tc-1", "toolA", "{}")),
+            List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
             List.of());
 
     store.checkpoints.put("process-1", checkpoint);
@@ -246,7 +246,7 @@ class DurableResumeMemoryTest {
             1L,
             "test-key",
             "session-123",
-            List.of(new PendingToolCall("tc-1", "toolA", "{}")),
+            List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
             List.of());
 
     store.checkpoints.put("process-1", checkpoint);

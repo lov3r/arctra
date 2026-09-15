@@ -1,0 +1,8 @@
+
+
+Note: Due to file size, M6-T4 report is being created in sections.
+Main report: M6-T4-DURABLE-TOOL-UNCERTAIN-OUTCOME-ARCHITECTURE-GATE.md (sections A-H completed)
+Additional sections I-K: M6-T4-SECTIONS-I-K.md (created separately)
+
+Remaining sections L-AN will be created in subsequent batches.
+

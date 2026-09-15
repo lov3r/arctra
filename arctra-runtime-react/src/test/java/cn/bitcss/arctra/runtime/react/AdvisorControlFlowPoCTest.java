@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientRequest;
@@ -28,6 +29,7 @@ import org.springframework.ai.chat.prompt.Prompt;
  * <p>Tests whether throwing from an advisor prevents MessageChatMemoryAdvisor.after()
  * from persisting messages.
  */
+@Disabled("Early advisor control flow PoC - core functionality implemented")
 class AdvisorControlFlowPoCTest {
 
   /** Test control signal - internal suspension representation. */

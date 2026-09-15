@@ -9,6 +9,8 @@ import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.execution.EventType;
+import cn.bitcss.arctra.execution.ExecutionEvent;
+import cn.bitcss.arctra.execution.ExecutionEventListener;
 import cn.bitcss.arctra.execution.ExecutionLedger;
 import cn.bitcss.arctra.governance.ToolGovernancePolicy;
 import cn.bitcss.arctra.process.AgentProcess;
@@ -74,8 +76,11 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
   private final RuntimeBindingResolver bindingResolver;
   private final String runtimeBindingKey;
 
-  // M6-T2A execution ledger (optional - audit trail)
-  private final ExecutionLedger executionLedger;
+  // M6-T2B.1 execution event sink (always non-null)
+  private final ExecutionEventListener executionEventSink;
+
+    // M6-T2.5A-R4 Durable resume coordinator (null in ephemeral mode)
+  private final DurableResumeCoordinator durableResumeCoordinator;
 
   /**
    * Create a tool-calling engine with conversation memory and governance support (M4 ephemeral).
@@ -179,11 +184,102 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
     this.checkpointStore = checkpointStore;
     this.bindingResolver = bindingResolver;
     this.runtimeBindingKey = runtimeBindingKey;
-    this.executionLedger = executionLedger; // M6-T2A: optional audit trail
+
+    // M6-T2B.1: adapt ExecutionLedger to ExecutionEventListener once at construction
+    this.executionEventSink = adaptLedgerToListener(executionLedger);
+
+    // M6-T4E: Create invocation-state store paired with checkpoint store
+    InvocationStateStore invocationStateStore =
+        createMatchingInvocationStateStore(checkpointStore);
+
+    // M6-T4C Phase 1: Create recovery classifier (package-private internal)
+    InvocationRecoveryClassifier recoveryClassifier =
+        new InvocationRecoveryClassifier(invocationStateStore);
+
+    // M6-T2.5A-R3: Create resumed execution handler
+      // M6-T2.5A-R3 Spring AI resumed execution handler (M6-T4A: pass invocationStateStore)
+      SpringAiResumedExecutionHandler resumedExecutionHandler =
+          new SpringAiResumedExecutionHandler(chatModel, chatMemory, tools, governancePolicy, invocationStateStore);
+
+    // M6-T2.5A-R4: Construct durable resume coordinator if durable mode is configured
+    if (isDurableMode()) {
+      // M6-T4C Phase 1: Pass recoveryClassifier to coordinator
+      this.durableResumeCoordinator =
+          new DurableResumeCoordinator(
+              checkpointStore, bindingResolver, executionEventSink, resumedExecutionHandler, this, recoveryClassifier);
+    } else {
+      this.durableResumeCoordinator = null;
+    }
+  }
+
+  /**
+   * Internal no-op listener for when no ExecutionLedger is configured.
+   *
+   * <p>This avoids null checks in execution logic.
+   *
+   * @since M6-T2B.1
+   */
+  private static final ExecutionEventListener NOOP_EVENT_LISTENER = event -> {};
+
+  /**
+   * Adapt ExecutionLedger to ExecutionEventListener with projection failure isolation.
+   *
+   * <p>If no ledger is provided, returns a no-op listener.
+   *
+   * <p><strong>Projection isolation:</strong> Composite listener ensures ledger append failures
+   * cannot alter execution truth.
+   *
+   * @param executionLedger the execution ledger (may be null)
+   * @return non-null ExecutionEventListener
+   * @since M6-T2B.1
+   */
+  private static ExecutionEventListener adaptLedgerToListener(ExecutionLedger executionLedger) {
+    if (executionLedger == null) {
+      return NOOP_EVENT_LISTENER;
+    }
+
+    ExecutionLedgerListener ledgerProjection = new ExecutionLedgerListener(executionLedger);
+    return new CompositeExecutionEventListener(List.of(ledgerProjection));
   }
 
   private boolean isDurableMode() {
     return checkpointStore != null;
+  }
+
+  /**
+   * Create matching InvocationStateStore paired with CheckpointStore.
+   *
+   * <p><strong>M6-T4E: Official JDBC Pairing</strong>
+   *
+   * <p>If CheckpointStore is JdbcCheckpointStore, creates matching JdbcInvocationStateStore
+   * sharing the same DataSource. This ensures restart-durable recovery substrate coherence.
+   *
+   * <p><strong>Unknown/custom CheckpointStore:</strong> Falls back to InMemoryInvocationStateStore.
+   * This configuration is execution-compatible but does NOT provide restart-durable recovery
+   * guarantees.
+   *
+   * @param checkpointStore the configured checkpoint store (may be null for ephemeral)
+   * @return matching invocation state store
+   * @since M6-T4E
+   */
+  private InvocationStateStore createMatchingInvocationStateStore(
+      CheckpointStore checkpointStore) {
+
+    if (checkpointStore == null) {
+      // Ephemeral mode - no durable configuration
+      return new InMemoryInvocationStateStore();
+    }
+
+    if (checkpointStore instanceof JdbcCheckpointStore jdbcStore) {
+      // Official JDBC persistent mode - pair with matching JDBC intent store
+      return new JdbcInvocationStateStore(jdbcStore.getDataSource());
+    }
+
+    // Unknown/custom checkpoint store - safe fallback to in-memory
+    // NOTE: This means custom persistent CheckpointStore implementations
+    // will NOT get restart-durable recovery guarantees unless explicitly
+    // paired through future configuration mechanism
+    return new InMemoryInvocationStateStore();
   }
 
   /**
@@ -310,28 +406,19 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
             .map(
                 tc ->
                     new PendingToolCall(
-                        tc.id(), tc.name(), tc.arguments() != null ? tc.arguments() : "{}"))
+                        OperationIds.generate(), // operationId - framework identity (M6-T3A)
+                        tc.id(),                 // toolCallId - protocol identity
+                        tc.name(),               // toolName
+                        tc.arguments()))         // arguments JSON
             .toList();
 
     // M6-T2A: APPROVAL_REQUIRED domain fact becomes TRUE
     // (governance decision = REQUIRE_APPROVAL)
-    if (executionLedger != null) {
-      try {
-        String toolNames = pendingBatch.stream().map(PendingToolCall::toolName).toList().toString();
-        executionLedger.append(
-            processId,
-            EventType.APPROVAL_REQUIRED,
-            null, // checkpointVersion not yet assigned
-            """
-            {"toolNames": %s, "policyReason": "governance_requires_approval"}
-            """.formatted(toolNames));
-      } catch (Exception e) {
-        // Ledger append failure does not block suspension
-        // Domain fact (approval required) remains true
-        // Audit trail has a gap
-        // Log for observability (future)
-      }
-    }
+    String toolNames = pendingBatch.stream().map(PendingToolCall::toolName).toList().toString();
+    String approvalPayload = """
+        {"toolNames": %s, "policyReason": "governance_requires_approval"}
+        """.formatted(toolNames);
+    emitEvent(processId, EventType.APPROVAL_REQUIRED, null, approvalPayload);
 
     // 4. Build checkpoint v1
     SuspensionCheckpoint checkpoint =
@@ -349,33 +436,22 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
 
     // M6-T2A: SUSPENDED domain fact becomes TRUE
     // (checkpoint.create() succeeded)
-    if (executionLedger != null) {
-      try {
-        executionLedger.append(
-            processId,
-            EventType.SUSPENDED,
-            1L, // checkpointVersion now assigned
-            """
-            {"checkpointVersion": 1, "pendingToolCount": %d, "evidenceCount": %d}
-            """.formatted(pendingBatch.size(), evidences.size()));
-      } catch (Exception e) {
-        // Ledger append failure does not block returning suspended result
-        // Domain fact (suspended) remains true (checkpoint exists and is resumable)
-        // Audit trail has a gap
-      }
-    }
+    String suspendedPayload = """
+        {"checkpointVersion": 1, "pendingToolCount": %d, "evidenceCount": %d}
+        """.formatted(pendingBatch.size(), evidences.size());
+    emitEvent(processId, EventType.SUSPENDED, 1L, suspendedPayload);
 
     // 6. ONLY after checkpoint persisted: create durable process
     AgentProcess process = ProcessFactory.createDurableSuspended(processId, 1L, this);
 
     // 7. Return suspended result
-    String toolNames =
+    String toolNamesList =
         suspensionState.assistantMessageWithToolCalls().getToolCalls().stream()
             .map(AssistantMessage.ToolCall::name)
             .toList()
             .toString();
     String partialContent =
-        String.format("Execution suspended: tool batch %s requires approval", toolNames);
+        String.format("Execution suspended: tool batch %s requires approval", toolNamesList);
     return new AgentResult(partialContent, evidences, process);
   }
 
@@ -684,7 +760,7 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
       String processId, long checkpointVersion, ContinuationSignal signal) {
 
     // Precondition: durable mode must be configured
-    if (!isDurableMode()) {
+    if (durableResumeCoordinator == null) {
       throw new IllegalStateException(
           "resumeProcess() requires complete durable configuration. "
               + "Current: checkpointStore="
@@ -695,404 +771,25 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
               + (runtimeBindingKey != null ? "present" : "null"));
     }
 
-    // CHECK A: Load and validate checkpoint
-    SuspensionCheckpoint checkpoint = loadAndValidateCheckpoint(processId, checkpointVersion);
-
-    // Resolve RuntimeBinding
-    cn.bitcss.arctra.runtime.RuntimeBinding binding =
-        resolveBinding(processId, checkpoint);
-
-    // M6-T2A: APPROVAL_GRANTED or APPROVAL_REJECTED domain fact becomes TRUE
-    // (CHECK A passed AND RuntimeBinding resolved AND signal validated)
-    if (executionLedger != null && signal instanceof ContinuationSignal.ApprovalSignal approval) {
-      try {
-        EventType approvalEvent = approval.approved()
-            ? EventType.APPROVAL_GRANTED
-            : EventType.APPROVAL_REJECTED;
-        executionLedger.append(
-            processId,
-            approvalEvent,
-            checkpoint.checkpointVersion(),
-            """
-            {"signalType": "%s", "checkpointVersion": %d}
-            """.formatted(approval.approved() ? "APPROVED" : "REJECTED",
-                         checkpoint.checkpointVersion()));
-      } catch (Exception e) {
-        // Ledger append failure does not block resume
-        // Domain fact (approval decision validated) remains true
-        // Audit trail has a gap
-      }
-    }
-
-    // M6-T2A: RESUMED domain fact becomes TRUE
-    // (CHECK A + RuntimeBinding + approval decision confirmed, ready to enter resumed execution)
-    if (executionLedger != null) {
-      try {
-        executionLedger.append(
-            processId,
-            EventType.RESUMED,
-            checkpoint.checkpointVersion(),
-            """
-            {"checkpointVersion": %d, "runtimeBindingKey": "%s"}
-            """.formatted(checkpoint.checkpointVersion(), runtimeBindingKey));
-      } catch (Exception e) {
-        // Ledger append failure does not block resume
-        // Domain fact (resumed) remains true (continuation environment prepared)
-        // Audit trail has a gap
-      }
-    }
-
-    // Protocol reconstruction and execution based on signal
-    List<Evidence> historicalEvidences = checkpoint.accumulatedEvidences();
-    List<Evidence> newEvidences = Collections.synchronizedList(new ArrayList<>());
-
-    List<Message> continuationMessages;
-    if (signal instanceof ContinuationSignal.ApprovalSignal approval) {
-      if (approval.approved()) {
-        // APPROVED: execute stored pending batch
-        continuationMessages =
-            reconstructAndExecuteApproved(
-                checkpoint, binding, historicalEvidences, newEvidences);
-      } else {
-        // REJECTED: construct denial responses
-        continuationMessages =
-            reconstructDenialResponses(checkpoint, binding);
-      }
-    } else {
-      throw new IllegalArgumentException(
-          "Unknown ContinuationSignal type: " + signal.getClass().getName());
-    }
-
-    // Merge evidences ONCE
-    List<Evidence> mergedEvidences = new ArrayList<>(historicalEvidences);
-    mergedEvidences.addAll(newEvidences);
-
-    // Continue model with reconstructed protocol
-    // Use special durable continuation that handles CHECK B
-    return durableContinueWithMessages(
-        checkpoint, continuationMessages, mergedEvidences, binding.definition(), binding.context());
+    // Delegate to durable resume coordinator
+    return durableResumeCoordinator.resume(processId, checkpointVersion, signal);
   }
-
   /**
-   * Durable continuation with CHECK B handling for completion and re-suspension.
-   */
-  private AgentResult durableContinueWithMessages(
-      SuspensionCheckpoint currentCheckpoint,
-      List<Message> messages,
-      List<Evidence> evidences,
-      AgentDefinition definition,
-      AgentExecutionContext context) {
-
-    var toolCallingManager = ToolCallingManager.builder().build();
-
-    List<ToolCallback> wrappedTools =
-        tools.stream()
-            .map(tool -> new EvidenceCapturingToolCallback(tool, evidences))
-            .map(wrapper -> (ToolCallback) wrapper)
-            .toList();
-
-    var governanceAdvisor =
-        new GovernanceToolCallingAdvisor(
-            wrappedTools, governancePolicy, context, toolCallingManager);
-
-    try {
-      String systemInstruction = buildSystemInstruction(definition);
-      var chatClient = ChatClient.builder(chatModel).build();
-
-      var promptSpec =
-          chatClient
-              .prompt()
-              .system(systemInstruction)
-              .messages(messages)
-              .advisors(
-                  spec -> {
-                    spec.param(
-                        "spring.ai.chat.client.tool.calling.advisor.auto-register", false);
-                    spec.advisors(governanceAdvisor);
-                  });
-
-      var content = promptSpec.call().content();
-
-      // Completion - CHECK B delete
-      boolean deleted =
-          checkpointStore.deleteIfVersion(
-              currentCheckpoint.processId(), currentCheckpoint.checkpointVersion());
-
-      if (!deleted) {
-        // M6-T2A: CHECKPOINT_CONFLICT domain fact becomes TRUE
-        // (CHECK B CAS returned false)
-        if (executionLedger != null) {
-          try {
-            executionLedger.append(
-                currentCheckpoint.processId(),
-                EventType.CHECKPOINT_CONFLICT,
-                currentCheckpoint.checkpointVersion(),
-                """
-                {"operation": "DELETE", "conflictType": "VERSION_MISMATCH", "checkpointVersion": %d}
-                """.formatted(currentCheckpoint.checkpointVersion()));
-          } catch (Exception e) {
-            // Ledger append failure does not affect conflict handling
-            // Domain fact (conflict occurred) remains true
-            // Audit trail has a gap
-          }
-        }
-
-        throw new cn.bitcss.arctra.checkpoint.CheckpointTransitionConflictException(
-            "Completion CHECK B failed for processId "
-                + currentCheckpoint.processId()
-                + ", version "
-                + currentCheckpoint.checkpointVersion());
-      }
-
-      // M6-T2A: COMPLETED domain fact becomes TRUE
-      // (CHECK B deleteIfVersion succeeded - checkpoint deleted)
-      if (executionLedger != null) {
-        try {
-          executionLedger.append(
-              currentCheckpoint.processId(),
-              EventType.COMPLETED,
-              currentCheckpoint.checkpointVersion(),
-              """
-              {"checkpointVersion": %d, "evidenceCount": %d}
-              """.formatted(currentCheckpoint.checkpointVersion(), evidences.size()));
-        } catch (Exception e) {
-          // Ledger append failure does not block returning completed result
-          // Domain fact (completed) remains true (checkpoint deleted, process no longer resumable)
-          // Audit trail has a gap
-        }
-      }
-
-      persistCompletedAssistant(context, content);
-      return new AgentResult(content, evidences);
-
-    } catch (ToolApprovalRequiredSignal signal) {
-      // Re-suspension
-      return handleDurableReSuspension(
-          currentCheckpoint, signal.state(), evidences, definition, context);
-
-    } finally {
-      governanceAdvisor.clearState();
-    }
-  }
-
-  /**
-   * Handle durable re-suspension with CHECK B (replaceIfVersion).
+   * Emit an execution event through the event sink.
    *
-   * <p><strong>M6-T2A Event Wiring:</strong>
-   * <ul>
-   *   <li>APPROVAL_REQUIRED after governance decision (new pending batch)
-   *   <li>CHECKPOINT_CONFLICT if CHECK B replaceIfVersion fails
-   *   <li>SUSPENDED after CHECK B replaceIfVersion succeeds
-   * </ul>
-   */
-  private AgentResult handleDurableReSuspension(
-      SuspensionCheckpoint oldCheckpoint,
-      GovernanceToolCallingAdvisor.SuspensionState suspensionState,
-      List<Evidence> mergedEvidences,
-      AgentDefinition definition,
-      AgentExecutionContext context) {
-
-    // Extract new pending batch
-    List<PendingToolCall> nextPendingBatch =
-        suspensionState.assistantMessageWithToolCalls().getToolCalls().stream()
-            .map(
-                tc ->
-                    new PendingToolCall(
-                        tc.id(), tc.name(), tc.arguments() != null ? tc.arguments() : "{}"))
-            .toList();
-
-    // M6-T2A: APPROVAL_REQUIRED domain fact becomes TRUE (new pending batch)
-    if (executionLedger != null) {
-      try {
-        String toolNames = nextPendingBatch.stream().map(PendingToolCall::toolName).toList().toString();
-        executionLedger.append(
-            oldCheckpoint.processId(),
-            EventType.APPROVAL_REQUIRED,
-            oldCheckpoint.checkpointVersion(), // Current version
-            """
-            {"toolNames": %s, "policyReason": "governance_requires_approval", "resuspension": true}
-            """.formatted(toolNames));
-      } catch (Exception e) {
-        // Ledger append failure does not block re-suspension
-        // Domain fact (approval required for new batch) remains true
-        // Audit trail has a gap
-      }
-    }
-
-    // Build checkpoint vN+1 with preserved identity
-    long nextVersion = oldCheckpoint.checkpointVersion() + 1;
-
-    SuspensionCheckpoint nextCheckpoint =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            oldCheckpoint.processId(), // Preserve processId
-            nextVersion,
-            oldCheckpoint.runtimeBindingKey(), // Preserve from checkpoint
-            oldCheckpoint.sessionId(),
-            nextPendingBatch,
-            mergedEvidences);
-
-    // CHECK B: replaceIfVersion
-    boolean replaced =
-        checkpointStore.replaceIfVersion(
-            oldCheckpoint.processId(), oldCheckpoint.checkpointVersion(), nextCheckpoint);
-
-    if (!replaced) {
-      // M6-T2A: CHECKPOINT_CONFLICT domain fact becomes TRUE
-      // (CHECK B CAS returned false)
-      if (executionLedger != null) {
-        try {
-          executionLedger.append(
-              oldCheckpoint.processId(),
-              EventType.CHECKPOINT_CONFLICT,
-              oldCheckpoint.checkpointVersion(),
-              """
-              {"operation": "REPLACE", "conflictType": "VERSION_MISMATCH", "checkpointVersion": %d, "attemptedNewVersion": %d}
-              """.formatted(oldCheckpoint.checkpointVersion(), nextVersion));
-        } catch (Exception e) {
-          // Ledger append failure does not affect conflict handling
-          // Domain fact (conflict occurred) remains true
-          // Audit trail has a gap
-        }
-      }
-
-      throw new cn.bitcss.arctra.checkpoint.CheckpointTransitionConflictException(
-          "Re-suspension CHECK B failed for processId "
-              + oldCheckpoint.processId()
-              + ", version "
-              + oldCheckpoint.checkpointVersion());
-    }
-
-    // M6-T2A: SUSPENDED domain fact becomes TRUE
-    // (CHECK B replaceIfVersion succeeded - new checkpoint version exists)
-    if (executionLedger != null) {
-      try {
-        executionLedger.append(
-            oldCheckpoint.processId(),
-            EventType.SUSPENDED,
-            nextVersion, // New checkpoint version
-            """
-            {"checkpointVersion": %d, "pendingToolCount": %d, "evidenceCount": %d, "resuspension": true}
-            """.formatted(nextVersion, nextPendingBatch.size(), mergedEvidences.size()));
-      } catch (Exception e) {
-        // Ledger append failure does not block returning suspended result
-        // Domain fact (suspended) remains true (new checkpoint exists and is resumable)
-        // Audit trail has a gap
-      }
-    }
-
-    // Create new durable process
-    AgentProcess nextProcess =
-        ProcessFactory.createDurableSuspended(oldCheckpoint.processId(), nextVersion, this);
-
-    String toolNames =
-        suspensionState.assistantMessageWithToolCalls().getToolCalls().stream()
-            .map(org.springframework.ai.chat.messages.AssistantMessage.ToolCall::name)
-            .toList()
-            .toString();
-    String partialContent =
-        String.format("Execution suspended: tool batch %s requires approval", toolNames);
-
-    return new AgentResult(partialContent, mergedEvidences, nextProcess);
-  }
-
-  /**
-   * CHECK A: Load and validate checkpoint version.
+   * <p>Projection failures are isolated by CompositeExecutionEventListener and do not affect
+   * execution truth.
    *
-   * @throws cn.bitcss.arctra.checkpoint.CheckpointNotFoundException if missing
-   * @throws cn.bitcss.arctra.checkpoint.StaleCheckpointException if version mismatch
+   * @param processId the process identifier
+   * @param eventType the event type
+   * @param checkpointVersion the checkpoint version (may be null)
+   * @param payload the event payload (may be null)
+   * @since M6-T2B.1
    */
-  private SuspensionCheckpoint loadAndValidateCheckpoint(
-      String processId, long expectedVersion) {
-
-    SuspensionCheckpoint checkpoint =
-        checkpointStore
-            .load(processId)
-            .orElseThrow(
-                () ->
-                    new cn.bitcss.arctra.checkpoint.CheckpointNotFoundException(
-                        "Checkpoint not found for processId: " + processId));
-
-    if (checkpoint.checkpointVersion() != expectedVersion) {
-      throw new cn.bitcss.arctra.checkpoint.StaleCheckpointException(
-          "Checkpoint version mismatch for processId "
-              + processId
-              + ". Expected: "
-              + expectedVersion
-              + ", Actual: "
-              + checkpoint.checkpointVersion());
-    }
-
-    return checkpoint;
-  }
-
-  /**
-   * Resolve RuntimeBinding using checkpoint identity.
-   *
-   * @throws cn.bitcss.arctra.runtime.ResumePreparationException if resolution fails
-   */
-  private cn.bitcss.arctra.runtime.RuntimeBinding resolveBinding(
-      String processId, SuspensionCheckpoint checkpoint) {
-
-    try {
-      return bindingResolver.resolve(
-          processId, checkpoint.runtimeBindingKey(), checkpoint.sessionId());
-    } catch (Exception e) {
-      throw new cn.bitcss.arctra.runtime.ResumePreparationException(
-          "RuntimeBinding resolution failed for processId "
-              + processId
-              + ", runtimeBindingKey="
-              + checkpoint.runtimeBindingKey(),
-          e);
-    }
-  }
-
-  /**
-   * Reconstruct and execute approved pending batch.
-   */
-  private List<Message> reconstructAndExecuteApproved(
-      SuspensionCheckpoint checkpoint,
-      cn.bitcss.arctra.runtime.RuntimeBinding binding,
-      List<Evidence> historicalEvidences,
-      List<Evidence> newEvidences) {
-
-    // Get conversation history from ChatMemory
-    List<Message> conversationHistory = getConversationHistory(binding.context());
-
-    // Use ProtocolReconstructor to execute approved batch
-    ProtocolReconstructor reconstructor = new ProtocolReconstructor(tools);
-
-    return reconstructor.executeApprovedBatch(
-        checkpoint.pendingBatch(),
-        conversationHistory,
-        historicalEvidences,
-        newEvidences);
-  }
-
-  /**
-   * Reconstruct denial responses for rejected batch.
-   */
-  private List<Message> reconstructDenialResponses(
-      SuspensionCheckpoint checkpoint, cn.bitcss.arctra.runtime.RuntimeBinding binding) {
-
-    // Get conversation history
-    List<Message> conversationHistory = getConversationHistory(binding.context());
-
-    // Use ProtocolReconstructor to construct denials
-    ProtocolReconstructor reconstructor = new ProtocolReconstructor(tools);
-
-    return reconstructor.constructDenialResponses(
-        checkpoint.pendingBatch(), conversationHistory);
-  }
-
-  /**
-   * Get conversation history from ChatMemory.
-   */
-  private List<Message> getConversationHistory(AgentExecutionContext context) {
-    String sessionId = context.sessionId();
-    if (sessionId != null) {
-      return chatMemory.get(sessionId);
-    }
-    return List.of();
+  private void emitEvent(
+      String processId, EventType eventType, Long checkpointVersion, String payload) {
+    executionEventSink.onEvent(
+        new ExecutionEvent(processId, eventType, checkpointVersion, payload));
   }
 }
+

@@ -1,0 +1,1356 @@
+# M6-T3 — DURABLE TOOL OPERATION IDENTITY ARCHITECTURE GATE
+
+**Date**: 2024-09-14  
+**Status**: Architecture Analysis Complete
+
+---
+
+## A. Frozen Baseline
+
+### M5 Durable Resume
+- Checkpoint = current recovery-state authority ✅
+- ExecutionLedger = durable execution-history authority ✅
+- Evidence = execution proof/content authority ✅
+- ChatMemory = conversation-history authority ✅
+- Recovery remains checkpoint-based ✅
+- Arctra is NOT event-sourced ✅
+
+### M6-T2C Event Architecture
+- Engine/Coordinator decides domain facts ✅
+- ExecutionEventListener observes already-true facts ✅
+- Domain fact truth ≠ ledger projection success ✅
+- No direct ExecutionLedger append from orchestration ✅
+
+### M6-T2B Tool Event Semantics
+- TOOL_EXECUTED = delegate returned normally ✅
+- TOOL_FAILED = delegate threw ✅
+- Current payload: `{"toolName":"..."}` ✅
+- toolCallId NOT in event correlation ✅
+
+### R3 Provider Boundary
+- Provider protocol correlation ≠ execution-event correlation ✅
+- Spring AI toolCallId preserved in PendingToolCall ✅
+- Duplicate same-name tool calls remain distinct ✅
+- No Map<String, ...> keyed by toolName ✅
+
+### R4 Durable Orchestration Boundary
+- DurableResumeCoordinator owns durable resume ✅
+- SpringAiResumedExecutionHandler owns Spring AI mechanics ✅
+- Verified: 368 tests, 0 failures, BUILD SUCCESS ✅
+
+---
+
+## B. Current Tool Invocation Flow
+
+### Durable Path (Checkpoint-Backed Resumed Execution)
+
+```
+1. Initial Suspension
+   Model → ToolCalls
+   → Governance REQUIRE_APPROVAL
+   → PendingToolCall DTOs created (toolCallId, toolName, arguments)
+   → SuspensionCheckpoint.create()
+   ↓
+   Checkpoint persisted (processId, checkpointVersion=1, pendingBatch)
+
+2. Resume Attempt
+   DurableResumeCoordinator.resume()
+   → CHECK A (load checkpoint)
+   → RuntimeBinding resolution
+   → SpringAiResumedExecutionHandler.executeResume()
+   ↓
+   ProtocolReconstructor.executeApprovedBatch()
+   → Reconstruct AssistantMessage.ToolCall (preserves toolCallId)
+   → Wrap tools with EvidenceCapturingToolCallback
+   → ToolCallingManager.executeToolCalls()
+   ↓
+   For each PendingToolCall:
+      → Spring AI dispatches by toolName
+      → EvidenceCapturingToolCallback.call()
+      → delegate.call(arguments) ← EXECUTION BOUNDARY
+      ↓
+      TOOL_EXECUTED or TOOL_FAILED event emitted
+      Evidence captured (on success)
+   ↓
+   → CHECK B (completion or re-suspension)
+```
+
+---
+
+## C. Identifier Availability Matrix
+
+| Boundary | processId | checkpointVersion | toolCallId | toolName | arguments |
+|----------|-----------|-------------------|------------|----------|-----------|
+| **SuspensionCheckpoint** | ✅ | ✅ | ✅ (in PendingToolCall) | ✅ | ✅ |
+| **DurableResumeCoordinator.resume()** | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **SpringAiResumedExecutionHandler** | ✅ | ✅ | ✅ (via pendingBatch) | ✅ | ✅ |
+| **ProtocolReconstructor** | ❌ | ❌ | ✅ (via pendingBatch) | ✅ | ✅ |
+| **EvidenceCapturingToolCallback** | ✅ | ✅ | ❌ | ✅ | ✅ |
+| **delegate.call() boundary** | ❌ | ❌ | ❌ | ✅ | ✅ |
+| **TOOL_EXECUTED/TOOL_FAILED event** | ✅ | ✅ | ❌ | ✅ | ❌ |
+
+### Critical Finding
+
+**toolCallId is NOT directly available at delegate.call() boundary** ❌
+
+**Evidence from source**:
+
+1. **EvidenceCapturingToolCallback** (line 89-122):
+   - Receives: `ToolCallback delegate`
+   - Receives: `ToolObservationContext` (processId, checkpointVersion, eventListener)
+   - Does NOT receive: toolCallId
+   - Only knows: `toolName` from `delegate.getToolDefinition().name()`
+
+2. **ToolObservationContext** (line 17-18):
+   ```java
+   * <li>toolCallId (deferred - not yet part of event correlation)
+   * <li>operationId / attemptId (not yet implemented)
+   ```
+
+3. **TOOL_EXECUTED/TOOL_FAILED payload** (line 208):
+   ```java
+   return String.format("{\"toolName\":\"%s\"}", escapeJson(toolName));
+   ```
+   - Contains ONLY toolName
+   - Does NOT contain toolCallId
+
+**Classification**: **INDIRECTLY** — toolCallId exists in checkpoint/protocol layer but is lost before delegate.call()
+
+---
+
+## D. Current Identity Semantics
+
+### processId
+**Fact owned**: One logical agent process execution lifecycle
+
+**Scope**: 
+- Stable across checkpointVersion increments
+- One process may contain multiple tool operations
+- Identifies the entire task, not individual operations
+
+**Authority**: AgentProcess / Checkpoint
+
+**Durability**: Persisted in SuspensionCheckpoint
+
+**Uniqueness**: Global (within Arctra deployment)
+
+---
+
+### checkpointVersion
+**Fact owned**: One suspension episode generation within a process
+
+**Scope**:
+- Increments with each re-suspension (1, 2, 3...)
+- One checkpoint may contain multiple PendingToolCall instances
+- Identifies recovery state version, not tool operation
+
+**Authority**: Checkpoint CAS operations
+
+**Durability**: Persisted in SuspensionCheckpoint
+
+**Uniqueness**: Per-process
+
+---
+
+### toolCallId
+**Fact owned**: Spring AI protocol correlation identity
+
+**Scope**:
+- Generated by Spring AI model response
+- Preserved through checkpoint round-trip
+- Used for ToolResponseMessage correlation
+- Provider-specific format
+
+**Authority**: Spring AI provider
+
+**Durability**: Persisted in PendingToolCall.toolCallId
+
+**Uniqueness**: Per-model-response (Spring AI responsibility)
+
+**Current problem**: Lost before delegate.call() execution boundary
+
+---
+
+### ExecutionRecord.recordId
+**Fact owned**: One ledger record identity
+
+**Format**: `processId + ":" + sequence`
+
+**Scope**:
+- Identifies one historical fact record
+- Multiple records may describe one operation (TOOL_EXECUTED, TOOL_FAILED, future retry events)
+
+**Authority**: ExecutionLedger
+
+**Durability**: Persisted in ledger
+
+**Uniqueness**: Global (per ledger)
+
+**Not suitable as operationId**: Multiple records per logical operation
+
+---
+
+### ExecutionRecord.sequence
+**Fact owned**: Ledger append order within a process
+
+**Scope**:
+- Auto-incremented by ledger (1, 2, 3...)
+- Identifies ledger ordering, not logical operation
+
+**Authority**: ExecutionLedger
+
+**Durability**: Persisted in ledger
+
+**Uniqueness**: Per-process
+
+**Not suitable as operationId**: Pure ordering identifier
+
+---
+
+## E. Missing Identity
+
+### What Fact Is NOT Currently Represented?
+
+**Missing**: **Logical durable tool operation identity**
+
+**Problem Statement**:
+
+Current at-least-once execution allows:
+
+```
+Time T1:
+  Attempt A → CHECK A succeeds → tool executes → CHECK B wins
+  
+Time T2 (concurrent):
+  Attempt B → CHECK A succeeds → same tool executes → CHECK B loses
+```
+
+**Result**: Same logical approved tool request executes physically twice.
+
+**Current inability**:
+
+1. Cannot answer: "Is this invocation the same logical operation as before?"
+2. Cannot correlate: Multiple physical execution attempts to one logical operation
+3. Cannot implement: Idempotency detection (future)
+4. Cannot implement: Retry accounting (future)
+5. Cannot correlate: External side-effect receipts to Arctra operations (future)
+
+**What's missing**: A stable, durable identifier that:
+- Represents ONE logical tool operation
+- Persists before physical execution
+- Survives concurrent resume attempts
+- Enables correlation across multiple physical attempts
+
+---
+
+## F. Logical Tool Operation Definition
+
+### Proposed Definition
+
+> **A Tool Operation is one logical durable tool invocation request represented by one PendingToolCall instance within one checkpoint suspension episode.**
+
+### Validation Against Source Truth
+
+#### 1. Does one PendingToolCall correspond to exactly one logical operation?
+
+**YES** ✅
+
+Evidence:
+- Each PendingToolCall contains (toolCallId, toolName, arguments)
+- Distinct tool calls from model have distinct toolCallIds
+- Same-name tools with different arguments are distinct operations
+
+#### 2. Does that remain true across concurrent resume attempts?
+
+**YES** ✅
+
+Evidence:
+- Concurrent attempts load the SAME checkpoint
+- Both see the SAME pendingBatch
+- Both execute the SAME logical operations
+- Different physical attempts, same logical operations
+
+#### 3. Does checkpoint re-suspension preserve the same pending call identity?
+
+**NO** ❌
+
+Evidence:
+- Re-suspension creates NEW PendingToolCall instances for NEW model tool requests
+- Old operations complete (or fail)
+- New operations begin
+- checkpointVersion increments (v1 → v2)
+
+#### 4. Can the same toolCallId legitimately appear in different processes?
+
+**UNKNOWN** ⚠️
+
+Risk:
+- toolCallId is Spring AI provider-generated
+- No guarantee of global uniqueness across processes
+- Likely unique per conversation, but not proven globally unique
+
+#### 5. Can toolCallId alone serve as globally durable operation identity?
+
+**NO** ❌
+
+Reasons:
+1. Provider-specific (Spring AI coupling)
+2. Unknown global uniqueness guarantees
+3. Lost at delegate.call() boundary
+4. Cross-provider portability concern
+
+#### 6. Does provider-specific toolCallId belong in Arctra durable semantics?
+
+**NO** ❌
+
+Reasoning:
+- toolCallId is Spring AI protocol concern
+- Arctra durable semantics should be provider-independent
+- ProtocolReconstructor already handles provider boundary
+- operationId should be framework-owned
+
+---
+
+## G. operationId Requirements
+
+### Evaluation Against Current Architecture
+
+| Requirement | Needed Now? | Rationale |
+|-------------|-------------|-----------|
+| Stable for one logical tool operation | ✅ YES | Core missing identity |
+| Same across duplicate physical attempts | ✅ YES | Concurrent resume correlation |
+| Different for different logical invocations | ✅ YES | Distinct operations must be distinguishable |
+| Provider-independent | ✅ YES | Arctra semantic boundary |
+| Persisted before physical side effect | ✅ YES | Pre-call durability required |
+| Recoverable after restart | ✅ YES | Checkpoint-backed identity |
+| Usable as durable ledger correlation | 🟡 FUTURE | Not yet required (events don't correlate operations) |
+
+### YAGNI Test
+
+**NOT speculative** ✅
+
+Evidence:
+- Current at-least-once allows duplicate execution
+- Cannot distinguish "same operation, different attempt"
+- Blocking future: idempotency, retry, receipts
+- Minimal identity is genuinely missing
+
+---
+
+## H. toolCallId vs operationId
+
+### toolCallId
+
+**Identity type**: Spring AI provider protocol correlation identity
+
+**Responsibilities**:
+- Correlates model ToolCall → ToolResponseMessage
+- Enables Spring AI protocol reconstruction
+- Preserves provider conversation flow
+
+**Owner**: Spring AI provider
+
+**Scope**: Provider protocol layer
+
+**Durability**: Checkpoint (for protocol reconstruction)
+
+**Problem**: Lost before execution boundary
+
+---
+
+### operationId
+
+**Identity type**: Arctra durable logical execution identity
+
+**Responsibilities**:
+- Identifies one logical tool operation across physical attempts
+- Enables concurrent attempt correlation
+- Supports future idempotency/retry/receipts
+
+**Owner**: Arctra framework
+
+**Scope**: Durable execution semantics
+
+**Durability**: Checkpoint (for recovery)
+
+**Required properties**: Provider-independent, pre-call persistent
+
+---
+
+### Relationship Decision
+
+**Separate fields** ✅
+
+**Rationale**:
+1. Different facts owned
+2. Different authorities
+3. Different scopes
+4. toolCallId is provider-specific, operationId is framework-semantic
+5. operationId must reach delegate.call() boundary, toolCallId currently doesn't
+
+**NOT aliases**: They serve distinct purposes
+
+**NOT optional mapping**: Both are required for their respective responsibilities
+
+---
+
+## I. operationId Candidate Analysis
+
+### Candidate A: `operationId = toolCallId`
+
+**Pros**:
+- Simple (reuse existing field)
+- Already durable
+- Already unique per tool call
+
+**Cons**:
+- ❌ Provider-specific identity (Spring AI coupling)
+- ❌ Unknown global uniqueness guarantees
+- ❌ Lost at delegate.call() boundary (current architecture)
+- ❌ Cross-provider portability violated
+- ❌ Semantic confusion (protocol ID ≠ execution ID)
+
+**Decision**: **REJECT** ❌
+
+---
+
+### Candidate B: `operationId = processId + checkpointVersion + toolCallId`
+
+**Pros**:
+- Globally unique (if toolCallId is unique per process+version)
+- Derivable from existing checkpoint state
+
+**Cons**:
+- ❌ checkpointVersion represents recovery state generation, not operation lifetime
+- ❌ What happens on re-suspension? New operation or same operation?
+- ❌ Concurrent resume shares same operationId (correct) but formula is conceptually wrong
+- ❌ Still contains provider-specific toolCallId
+- ❌ Makes checkpointVersion accidentally part of identity authority
+
+**Example problem**:
+
+```
+Process P1, checkpoint v1:
+  PendingToolCall(toolCallId="tc-1", toolName="fetchData", args="{...}")
+  operationId = "P1:1:tc-1"
+  
+Concurrent resume attempts:
+  Worker A: executes operationId "P1:1:tc-1"
+  Worker B: executes operationId "P1:1:tc-1"
+  ✅ Same operationId (correct)
+
+Re-suspension to v2 with NEW tool call:
+  PendingToolCall(toolCallId="tc-2", toolName="processData", args="{...}")
+  operationId = "P1:2:tc-2"
+  ✅ Different operationId (correct)
+```
+
+**Evaluation**: Works mechanically but semantically confusing
+
+**Decision**: **CONDITIONAL** 🟡 — Works but conceptually flawed
+
+---
+
+### Candidate C: Framework-Generated Opaque operationId
+
+**Model**: UUID or ULID generated when PendingToolCall is first created
+
+**Pros**:
+- ✅ Provider-independent
+- ✅ Explicit framework ownership
+- ✅ No semantic confusion
+- ✅ Stable once created
+- ✅ Globally unique
+
+**Cons**:
+- Requires PendingToolCall schema change
+- Requires checkpoint schema compatibility analysis
+- When generated? (initial suspension timing critical)
+- Old checkpoints without operationId need migration strategy
+
+**Generation timing**:
+
+```
+Initial Suspension:
+  Model produces ToolCalls
+  → For each ToolCall:
+      toolCallId = tc.id() (Spring AI)
+      operationId = generateOperationId() (Arctra)
+      PendingToolCall(operationId, toolCallId, toolName, arguments)
+  → SuspensionCheckpoint.create(pendingBatch)
+  ↓
+  operationId durable BEFORE any physical execution
+```
+
+**Concurrent resume**:
+```
+Worker A loads checkpoint → sees operationId="op-123"
+Worker B loads checkpoint → sees operationId="op-123"
+Both execute same logical operation (correctly)
+```
+
+**Re-suspension**:
+```
+New model ToolCalls → NEW operationIds generated
+Old operations complete, new operations begin
+```
+
+**Decision**: **RECOMMENDED** ✅
+
+---
+
+## J. attemptId Analysis
+
+### Definition
+
+> **attemptId identifies one physical framework attempt to execute a logical Tool Operation**
+
+### Example
+
+```
+operationId = "op-123"
+
+Concurrent resume:
+  Worker A: attemptId = "attempt-uuid-A"
+  Worker B: attemptId = "attempt-uuid-B"
+
+Both may physically execute the external tool
+```
+
+### Is attemptId Required Now?
+
+**NO** ❌
+
+**YAGNI Reasoning**:
+
+1. **No current owner**: No code owns "one execution attempt" distinct from operation
+2. **Ledger sequence suffices**: ExecutionRecord.sequence already orders events per process
+3. **No pre-call durability need**: attemptId only matters if we record pre-execution intent
+4. **Future idempotency**: May need attemptId, but not proven yet
+5. **Future retry**: Would definitely need attemptId, but not implementing retry now
+
+**Future pressure points**:
+- Retry policy: "max 3 attempts per operation"
+- Receipt correlation: "attempt A succeeded externally, attempt B receipt arrived"
+- Uncertain outcome handling: "attempt started but outcome unknown"
+
+**Recommendation**: **DEFER** to future milestone when actual attempt-level semantics are required
+
+---
+
+## K. Pre-call Durability Boundary
+
+### Critical Requirement
+
+> Operation identity must be durable BEFORE delegate.call() to enable crash-safe correlation
+
+### Current Durable Boundaries
+
+**BEFORE execution**:
+1. ✅ `SuspensionCheckpoint.create()` — initial suspension
+2. ✅ `CheckpointStore.replaceIfVersion()` — re-suspension (CHECK B)
+
+**AFTER execution**:
+3. `ExecutionLedger.append()` — historical facts (TOOL_EXECUTED/TOOL_FAILED)
+
+### Where Can operationId Become Durable?
+
+**Option 1: Initial Suspension (RECOMMENDED)** ✅
+
+```
+SpringAiToolCallingEngine.execute()
+  → Model produces ToolCalls
+  → Governance evaluates → REQUIRE_APPROVAL
+  → MaterializeAgentProcess:
+      For each ToolCall:
+        operationId = generateOperationId()
+        PendingToolCall(operationId, toolCallId, toolName, arguments)
+      SuspensionCheckpoint.create(pendingBatch)
+  ↓
+  Checkpoint persisted (processId, v1, pendingBatch with operationIds)
+  ↓
+  BEFORE any physical tool execution
+```
+
+**Properties**:
+- ✅ operationId durable before first execution attempt
+- ✅ Natural timing (operation identity created when operation is defined)
+- ✅ Survives concurrent resume correctly
+
+---
+
+**Option 2: Re-suspension (ALSO CORRECT)** ✅
+
+```
+Resumed execution produces NEW ToolCalls
+  → Governance REQUIRE_APPROVAL again
+  → For each new ToolCall:
+      operationId = generateOperationId()
+      PendingToolCall(operationId, ...)
+  → replaceIfVersion(checkpointV+1, newPendingBatch)
+```
+
+**Properties**:
+- ✅ New operations get new operationIds
+- ✅ Durable before their physical execution
+
+---
+
+**Option 3: ExecutionLedger pre-call record (NOT YET)** ❌
+
+Possible future:
+```
+TOOL_STARTED event before delegate.call()
+```
+
+**Problem**: Not implementing TOOL_STARTED in M6-T3
+
+---
+
+### Recommended Durability Strategy
+
+**PendingToolCall schema change + checkpoint persistence** ✅
+
+**Timing**: Operation identity assigned when PendingToolCall is created (initial/re-suspension)
+
+**Authority**: SuspensionCheckpoint (already owns pending operations)
+
+---
+
+## L. PendingToolCall Ownership Analysis
+
+### Current PendingToolCall
+
+**File**: `arctra-core/src/main/java/cn/bitcss/arctra/checkpoint/PendingToolCall.java`
+
+**Current schema**:
+```java
+public record PendingToolCall(
+    String toolCallId,  // Spring AI protocol ID
+    String toolName,
+    String arguments
+)
+```
+
+**Documented responsibility** (line 7-10):
+> Framework-neutral DTO for checkpoint persistence. Contains only the minimal protocol identity required to reconstruct Spring AI tool-calling continuation after runtime boundary.
+
+**Question**: Is it "provider protocol DTO" or "durable framework operation state"?
+
+---
+
+### Source Truth Analysis
+
+**Usage evidence**:
+
+1. **Stored in SuspensionCheckpoint** — durable recovery state ✅
+2. **Reconstructed into Spring AI protocol** — ProtocolReconstructor ✅
+3. **Contains toolCallId** — provider-specific ✅
+4. **Public record** — part of arctra-core public API ✅
+
+**Current interpretation**: **HYBRID**
+
+It is BOTH:
+- Durable checkpoint state (framework concern)
+- Provider protocol reconstruction input (Spring AI concern)
+
+---
+
+### Should PendingToolCall Carry operationId?
+
+**YES** ✅
+
+**Rationale**:
+
+1. **Semantic fit**: PendingToolCall represents a pending durable operation
+2. **Durability timing**: operationId must be durable when PendingToolCall is created
+3. **No better owner**: No other abstraction owns "pending operation state"
+4. **Mixed responsibility acceptable**: Already contains toolCallId (provider) and represents checkpoint state (framework)
+
+**Counter-argument rejected**:
+- "PendingToolCall is provider protocol DTO" — FALSE, it's durable checkpoint state that ALSO feeds protocol reconstruction
+- "Adding operationId pollutes provider boundary" — Already polluted with checkpoint durability concern
+
+---
+
+### Proposed Schema
+
+```java
+public record PendingToolCall(
+    String operationId,   // Arctra framework operation identity (NEW)
+    String toolCallId,    // Spring AI protocol identity (existing)
+    String toolName,
+    String arguments
+)
+```
+
+**Field ordering rationale**:
+- operationId FIRST (framework primary identity)
+- toolCallId SECOND (provider protocol identity)
+
+---
+
+## M. Checkpoint Schema Impact
+
+### Schema Change Required
+
+**YES** ✅ — PendingToolCall gains operationId field
+
+### schemaVersion Increment Required?
+
+**YES** ✅
+
+**Current**: `SuspensionCheckpoint.CURRENT_SCHEMA_VERSION = "1.0"`
+
+**Proposed**: `"1.1"` or `"2.0"`
+
+**Recommendation**: `"1.1"` (additive change, old checkpoints readable with migration)
+
+---
+
+### Old Checkpoint Compatibility
+
+**Problem**: Old checkpoints lack operationId in PendingToolCall
+
+**Options**:
+
+**A. Reject old checkpoints** ❌
+- Simple implementation
+- Breaks all in-flight processes
+- NOT acceptable for production
+
+**B. Derive operationId on load** 🟡
+- `operationId = hash(processId + checkpointVersion + toolCallId)`
+- Readable without schema change
+- Problem: Derived IDs not semantically equivalent to generated IDs
+- Problem: If resume fails and retries, does it generate NEW operationId or reuse derived?
+
+**C. Migrate old checkpoints on first load** ✅ RECOMMENDED
+- On load, detect schema "1.0"
+- Generate operationIds for PendingToolCall instances
+- Upgrade schema to "1.1"
+- replaceIfVersion() with upgraded checkpoint
+- Future loads see schema "1.1"
+
+**D. Support both schemas indefinitely** 🟡
+- Code branches on schemaVersion
+- PendingToolCall constructor accepts optional operationId
+- Complex but safe
+
+**Recommendation**: **C (migrate on load)** with **D (optional backward compat)** as fallback
+
+---
+
+### Migration Timing
+
+**NOT in M6-T3** ❌
+
+M6-T3 is architecture gate only. Migration implementation is M6-T3A or later.
+
+---
+
+## N. Initial Suspension Identity Timing
+
+### Current Flow
+
+```
+SpringAiToolCallingEngine.execute()
+  → ChatClient.call()
+  → Model response with ToolCalls
+  → Governance.evaluate() → REQUIRE_APPROVAL
+  → materializeAgentProcess():
+      List<PendingToolCall> pendingBatch = buildPendingBatch(toolCalls)
+      SuspensionCheckpoint checkpoint = new SuspensionCheckpoint(
+          processId, 1L, bindingKey, sessionId, pendingBatch, evidences
+      )
+      checkpointStore.create(checkpoint)
+  → return AgentResult with AgentProcess
+```
+
+### Proposed Timing (with operationId)
+
+```
+SpringAiToolCallingEngine.execute()
+  → Model response with ToolCalls
+  → Governance → REQUIRE_APPROVAL
+  → materializeAgentProcess():
+      List<PendingToolCall> pendingBatch = 
+          toolCalls.stream().map(tc -> 
+              new PendingToolCall(
+                  generateOperationId(),  // NEW
+                  tc.id(),
+                  tc.name(),
+                  tc.arguments()
+              )
+          ).toList()
+      
+      SuspensionCheckpoint checkpoint = new SuspensionCheckpoint(...)
+      checkpointStore.create(checkpoint)
+```
+
+**Result**: operationId durable BEFORE any physical execution ✅
+
+---
+
+## O. Re-suspension Identity Timing
+
+### Current Flow
+
+```
+SpringAiResumedExecutionHandler.executeResume()
+  → ProtocolReconstructor.executeApprovedBatch()
+  → Tools execute
+  → ChatClient.call() with continuation
+  → Model produces NEW ToolCalls
+  → Governance → REQUIRE_APPROVAL
+  → Build new pending batch
+  → DurableResumeCoordinator: CHECK B re-suspension
+      replaceIfVersion(processId, oldVersion, newCheckpoint)
+```
+
+### Proposed Timing (with operationId)
+
+**NEW operations get NEW operationIds** ✅
+
+```
+Model produces NEW ToolCalls
+  → For each new ToolCall:
+      operationId = generateOperationId()  // NEW operation
+      PendingToolCall(operationId, toolCallId, ...)
+  
+  → replaceIfVersion(processId, v1, checkpointV2)
+```
+
+**Critical invariant**: OLD operations complete/fail, NEW operations begin
+
+---
+
+## P. Concurrent Resume Semantics
+
+### Scenario
+
+```
+Time T0:
+  Checkpoint created:
+    processId = "P1"
+    checkpointVersion = 1
+    pendingBatch = [
+        PendingToolCall(operationId="op-A", toolCallId="tc-1", toolName="fetch", ...)
+    ]
+
+Time T1:
+  Worker 1 resumes:
+    CHECK A succeeds → loads checkpoint v1
+    Sees operationId="op-A"
+    Executes operation "op-A"
+    → External tool called
+    CHECK B (may win or lose)
+
+Time T2 (concurrent):
+  Worker 2 resumes:
+    CHECK A succeeds → loads checkpoint v1
+    Sees operationId="op-A" (SAME operation)
+    Executes operation "op-A"
+    → External tool called AGAIN
+    CHECK B (may win or lose)
+```
+
+### operationId Semantics
+
+**Both workers execute the SAME logical operation** ✅
+
+**operationId is identical** ✅
+
+**This is CORRECT** ✅
+
+**Why**: at-least-once execution allows duplicate physical attempts for one logical operation
+
+---
+
+### Future Idempotency (NOT M6-T3)
+
+```
+Future with idempotency:
+  Worker 1: operationId="op-A" → external tool executes
+  Worker 2: operationId="op-A" → idempotency layer detects duplicate → skips external call
+```
+
+**M6-T3 does NOT implement this** — identity foundation only
+
+---
+
+## Q. Event Correlation Impact
+
+### Current TOOL_EXECUTED/TOOL_FAILED Payload
+
+```java
+{"toolName":"fetchData"}
+```
+
+**NO operationId** ❌
+
+### Future Payload (NOT M6-T3)
+
+```java
+{
+  "toolName": "fetchData",
+  "operationId": "op-abc-123"
+}
+```
+
+### Should M6-T3 Add operationId to Events?
+
+**NO** ❌
+
+**YAGNI Reasoning**:
+1. No current consumer uses event-level operation correlation
+2. ExecutionLedger already correlates by processId
+3. Event payload schema change is separate concern
+4. M6-T3 scope: identity foundation only
+
+**Future milestone**: M6-T3B or M6-T4 may add operation correlation to events
+
+---
+
+## R. Exactly-Once / Idempotency Non-Claims
+
+### Critical Invariant
+
+> operationId enables correlation. It does NOT make side effects idempotent.
+
+### What operationId DOES
+
+✅ Identifies one logical operation  
+✅ Correlates multiple physical attempts  
+✅ Enables future idempotency detection  
+
+### What operationId DOES NOT DO
+
+❌ Prevent duplicate execution  
+❌ Make external tools idempotent  
+❌ Guarantee exactly-once semantics  
+❌ Implement retry logic  
+❌ Provide external receipts  
+
+### M6-T3 Preserves
+
+**at-least-once execution** ✅
+
+Future milestones may add:
+- Idempotency detection (requires external cooperation)
+- Retry policy (requires attempt tracking)
+- Receipt correlation (requires external acknowledgment)
+
+---
+
+## S. Public API Impact
+
+### PendingToolCall is Public
+
+**Package**: `cn.bitcss.arctra.checkpoint`  
+**Module**: `arctra-core`  
+**Visibility**: `public record`
+
+### Constructor Change
+
+**Current**:
+```java
+public record PendingToolCall(String toolCallId, String toolName, String arguments)
+```
+
+**Proposed**:
+```java
+public record PendingToolCall(
+    String operationId,
+    String toolCallId,
+    String toolName,
+    String arguments
+)
+```
+
+**Breaking change**: ✅ YES
+
+**Impact**: Anyone constructing PendingToolCall manually
+
+### Mitigation Strategies
+
+**A. Accept breaking change** ✅ RECOMMENDED
+- Early milestone (M6)
+- Public but low external usage expected
+- Clear migration path
+
+**B. Overloaded constructor** 🟡
+```java
+public PendingToolCall(String toolCallId, String toolName, String arguments) {
+    this(null, toolCallId, toolName, arguments); // operationId=null
+}
+```
+- Allows old code to compile
+- Runtime validation required
+
+**C. Builder pattern** ❌
+- Heavy for 4-field record
+- Not idiomatic for Java records
+
+**Recommendation**: **Accept breaking change**, document in migration guide
+
+---
+
+## T. Provider Independence
+
+### Design Goal
+
+> Arctra durable semantics should work with any tool-calling provider
+
+### operationId Provider Independence
+
+**Current provider**: Spring AI  
+**operationId generation**: Framework (UUID/ULID)  
+**operationId semantics**: Framework-defined  
+
+**Provider change impact**: ZERO ✅
+
+### toolCallId Provider Dependence (Acceptable)
+
+**Purpose**: Protocol reconstruction  
+**Scope**: Provider boundary only  
+**Not leaked**: To execution semantics  
+
+**Separation achieved**: ✅
+
+---
+
+## U. Change Amplification Analysis
+
+### Future Retry
+
+**Question**: Would adding retry modify DurableResumeCoordinator?
+
+**Answer**: **Minimal** ✅
+
+**Rationale**:
+- Retry logic belongs in tool execution runtime, not checkpoint orchestration
+- Coordinator remains: CHECK A → execute → CHECK B
+- Execution layer handles: attempt, retry, backoff
+
+**Pressure point**: May need attemptId at that time
+
+---
+
+### Future Idempotency
+
+**Question**: Would idempotency logic live in tool execution runtime?
+
+**Answer**: **YES** ✅
+
+**Rationale**:
+- Idempotency detection: "has operationId been executed?"
+- Belongs in tool execution subsystem
+- NOT in checkpoint orchestration
+
+**Coordinator unchanged**: ✅
+
+---
+
+### Future Persistent Store
+
+**Question**: Would operation identity survive restart?
+
+**Answer**: **YES** ✅
+
+**Evidence**: operationId in SuspensionCheckpoint → persisted in CheckpointStore
+
+---
+
+### Future Provider Replacement
+
+**Question**: Would operation identity work without Spring AI toolCallId?
+
+**Answer**: **YES** ✅
+
+**Evidence**: operationId is framework-generated, independent of toolCallId
+
+---
+
+### Future Receipts
+
+**Question**: Could receipts correlate to operationId without changing checkpoint authority?
+
+**Answer**: **YES** ✅
+
+**Design**:
+```
+External system returns: {operationId: "op-123", externalTxId: "ext-456", status: "committed"}
+Arctra correlates by operationId without modifying checkpoint
+```
+
+**Checkpoint remains recovery authority**: ✅
+
+---
+
+## V. Candidate Tool Execution Subsystem Pressure
+
+### Current Responsibilities Scattered
+
+- Tool wrapping: ProtocolReconstructor
+- Evidence capture: EvidenceCapturingToolCallback
+- Event emission: EvidenceCapturingToolCallback
+- Operation identity: (missing, proposed: PendingToolCall)
+- Attempt identity: (missing, deferred)
+
+### Future ToolExecutionRuntime Responsibilities
+
+Possible future:
+- Operation identity management
+- Attempt identity management
+- Pre-call observation (TOOL_STARTED)
+- Post-call outcome
+- Retry logic
+- Idempotency detection
+- Receipt correlation
+- Timeout handling
+
+### Should M6-T3 Create ToolExecutionRuntime?
+
+**NO** ❌
+
+**YAGNI Reasoning**:
+1. Current implementation (PendingToolCall + EvidenceCapturingToolCallback) sufficient for operationId
+2. No immediate need for unified subsystem
+3. Future refactoring can extract when pressure is real
+
+**Defer**: Until retry or idempotency implementation requires it
+
+---
+
+## W. Recommended M6-T3A Slice
+
+### Smallest Safe Implementation
+
+**Scope**: Introduce durable operationId only
+
+**Changes required**:
+
+1. **PendingToolCall schema** (arctra-core)
+   - Add `operationId` field (String, non-null)
+   - Update constructor
+   - PUBLIC API BREAK
+
+2. **SuspensionCheckpoint** (arctra-core)
+   - Schema version "1.0" → "1.1"
+   - No structural change (PendingToolCall change propagates)
+
+3. **Operation ID generation** (arctra-runtime-react)
+   - New utility: `OperationIdGenerator.generate()` → UUID.randomUUID().toString()
+   - Or ULID if preferred
+
+4. **Initial suspension** (SpringAiToolCallingEngine)
+   - Generate operationId when building pendingBatch
+   - Before checkpoint.create()
+
+5. **Re-suspension** (SpringAiResumedExecutionHandler)
+   - Generate operationId for NEW tool calls
+   - Before checkpoint replaceIfVersion()
+
+6. **Tests**
+   - Update all PendingToolCall construction sites
+   - Verify operationId generated before execution
+   - Verify operationId stable across concurrent resume
+
+### Files Likely to Change
+
+```
+arctra-core/src/main/java/cn/bitcss/arctra/checkpoint/PendingToolCall.java (MODIFIED)
+arctra-core/src/main/java/cn/bitcss/arctra/checkpoint/SuspensionCheckpoint.java (VERSION BUMP)
+arctra-runtime-react/src/main/java/cn/bitcss/arctra/runtime/react/OperationIdGenerator.java (NEW)
+arctra-runtime-react/src/main/java/cn/bitcss/arctra/runtime/react/SpringAiToolCallingEngine.java (MODIFIED)
+arctra-runtime-react/src/main/java/cn/bitcss/arctra/runtime/react/SpringAiResumedExecutionHandler.java (MODIFIED)
+arctra-runtime-react/src/test/java/**/*Test.java (UPDATED)
+```
+
+### What M6-T3A Does NOT Include
+
+❌ attemptId  
+❌ TOOL_STARTED event  
+❌ Event payload operationId  
+❌ Idempotency  
+❌ Retry  
+❌ Receipt  
+❌ ToolExecutionRuntime  
+❌ Checkpoint migration (can be deferred to M6-T3B)  
+
+---
+
+## X. Explicit Non-Goals
+
+M6-T3 / M6-T3A DOES NOT:
+
+1. ❌ Implement idempotency
+2. ❌ Implement retry logic
+3. ❌ Prevent duplicate execution
+4. ❌ Change at-least-once semantics
+5. ❌ Add attemptId
+6. ❌ Add TOOL_STARTED event
+7. ❌ Add operationId to TOOL_EXECUTED/TOOL_FAILED payload
+8. ❌ Create ToolExecutionRuntime abstraction
+9. ❌ Add external receipt correlation
+10. ❌ Add timeout handling
+11. ❌ Add compensation logic
+12. ❌ Modify DurableResumeCoordinator CHECK A/B semantics
+13. ❌ Create new persistent store
+14. ❌ Change ExecutionLedger authority
+15. ❌ Implement checkpoint migration (defer to M6-T3B)
+
+---
+
+## Y. M6-T3A Entry Gate
+
+### 1. What uniquely identifies one logical durable tool operation today?
+
+**Answer**: Nothing ❌
+
+**Evidence**: processId identifies process, checkpointVersion identifies recovery generation, toolCallId is provider protocol ID. No framework-owned logical operation identity exists.
+
+---
+
+### 2. Is current toolCallId sufficient as Arctra operation identity?
+
+**Answer**: NO ❌
+
+**Reasons**:
+- Provider-specific (Spring AI)
+- Unknown global uniqueness
+- Lost at delegate.call() boundary
+- Cross-provider portability concern
+
+---
+
+### 3. Should operationId be provider-independent?
+
+**Answer**: YES ✅
+
+**Rationale**: Arctra durable semantics should work with any provider
+
+---
+
+### 4. Must operationId be durable before delegate.call()?
+
+**Answer**: YES ✅
+
+**Rationale**: Crash after external side effect but before operationId persistence → no correlation
+
+---
+
+### 5. Where should operationId first become durable?
+
+**Answer**: SuspensionCheckpoint (initial suspension or re-suspension) ✅
+
+**Timing**: When PendingToolCall is created, before checkpoint.create() or replaceIfVersion()
+
+---
+
+### 6. Does PendingToolCall need to carry operationId?
+
+**Answer**: YES ✅
+
+**Rationale**:
+- Represents pending durable operation
+- Natural timing for operation identity
+- No better owner exists
+
+---
+
+### 7. Does checkpoint schema need to change?
+
+**Answer**: YES ✅
+
+**Change**: PendingToolCall gains operationId field  
+**Schema version**: "1.0" → "1.1"
+
+---
+
+### 8. Is attemptId required in M6-T3A?
+
+**Answer**: NO ❌
+
+**YAGNI**: No current code owns "one execution attempt". Defer to future retry/idempotency milestone.
+
+---
+
+### 9. Does M6-T3A change at-least-once semantics?
+
+**Answer**: NO ❌
+
+**Preserved**: at-least-once execution remains. operationId enables correlation, not prevention.
+
+---
+
+### 10. Does M6-T3A implement idempotency?
+
+**Answer**: NO ❌
+
+**Scope**: Identity foundation only. Idempotency is future milestone.
+
+---
+
+### 11. Does DurableResumeCoordinator need semantic changes?
+
+**Answer**: NO ❌
+
+**Preserved**: CHECK A → execute → CHECK B. Operation identity lives in execution layer, not orchestration.
+
+---
+
+### 12. Is a new ToolExecutionRuntime abstraction justified NOW?
+
+**Answer**: NO ❌
+
+**YAGNI**: Current PendingToolCall + EvidenceCapturingToolCallback sufficient. Defer abstraction until retry or idempotency requires it.
+
+---
+
+### 13. What is the smallest safe M6-T3A implementation?
+
+**Answer**: Add operationId to PendingToolCall, generate at suspension time, preserve across resume
+
+**Files**: ~5 production files, ~N test files  
+**API break**: PendingToolCall constructor (acceptable at M6)  
+**Schema change**: "1.0" → "1.1" (migration deferred to M6-T3B)
+
+---
+
+## Z. Decision
+
+### ✅ **GO — M6-T3A may begin**
+
+**Architecture is sound**:
+- operationId fills genuine missing identity gap ✅
+- PendingToolCall is correct owner ✅
+- Pre-call durability achievable ✅
+- Provider independence maintained ✅
+- Change amplification acceptable ✅
+- YAGNI applied correctly ✅
+
+**Recommended approach**:
+- **Candidate C** (framework-generated operationId) ✅
+- UUID or ULID generation
+- PendingToolCall schema change
+- Checkpoint schema "1.1"
+- Migration deferred to M6-T3B
+
+**NOT speculative**: Current at-least-once allows duplicate execution, operationId enables correlation for future idempotency/retry.
+
+**Scope discipline**: operationId only, no attemptId, no idempotency, no retry, no ToolExecutionRuntime.
+
+---
+
+## HARD STOP
+
+M6-T3A implementation may now begin with:
+- Add operationId to PendingToolCall
+- Generate at suspension time
+- Tests verify stability and correlation
+
+**DO NOT implement**: attemptId, idempotency, retry, TOOL_STARTED, event payload changes, ToolExecutionRuntime, migration
+
+**Await**: Implementation approval

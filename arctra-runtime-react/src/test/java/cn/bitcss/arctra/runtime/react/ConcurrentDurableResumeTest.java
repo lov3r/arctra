@@ -213,7 +213,7 @@ class ConcurrentDurableResumeTest {
             1L,
             BINDING_KEY,
             SESSION_ID,
-            List.of(new PendingToolCall("tc-1", "toolX", "{}")),
+            List.of(new PendingToolCall("test-op-X", "tc-1", "toolX", "{}")),
             List.of());
     store.create(cp1);
 
@@ -333,7 +333,7 @@ class ConcurrentDurableResumeTest {
             1L,
             BINDING_KEY,
             SESSION_ID,
-            List.of(new PendingToolCall("tc-1", "toolX", "{}")),
+            List.of(new PendingToolCall("test-op-X", "tc-1", "toolX", "{}")),
             List.of());
     store.create(cp1);
 
@@ -424,7 +424,7 @@ class ConcurrentDurableResumeTest {
             1L,
             BINDING_KEY,
             SESSION_ID,
-            List.of(new PendingToolCall("tc-1", "toolX", "{}")),
+            List.of(new PendingToolCall("test-op-X", "tc-1", "toolX", "{}")),
             List.of());
     store.create(cp1);
 

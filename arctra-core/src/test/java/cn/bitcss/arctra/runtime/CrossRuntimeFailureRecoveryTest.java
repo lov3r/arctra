@@ -58,7 +58,7 @@ class CrossRuntimeFailureRecoveryTest {
             1L,
             "deploy-agent/v3", // Required binding key
             "session-1",
-            List.of(new PendingToolCall("tc-1", "deployTool", "{}")),
+            List.of(new PendingToolCall("test-op-X", "tc-1", "deployTool", "{}")),
             List.of());
 
     store.create(checkpoint);

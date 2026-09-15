@@ -151,31 +151,55 @@ public enum EventType {
    */
   RESUMED,
 
-  // Tool execution (provisional semantics pending operationId/receipt refinement)
+  // Tool execution (M6-T2B semantics)
 
   /**
-   * Framework-observed tool callback execution returned successfully.
+   * Framework observed the ToolCallback invocation return normally.
    *
-   * <p><strong>Provisional semantics:</strong> The tool callback invoked by the framework returned
-   * without throwing an exception. This does NOT guarantee:
+   * <p><strong>M6-T2B semantics:</strong> The delegate ToolCallback returned without throwing an
+   * exception. The framework observed a successful return from the tool invocation.
+   *
+   * <p><strong>This does NOT guarantee:</strong>
    *
    * <ul>
-   *   <li>External side effect is transactionally committed
-   *   <li>External system executed exactly once
+   *   <li>External side effect is committed
+   *   <li>External transaction is complete
+   *   <li>Exactly-once execution
+   *   <li>External system state is unchanged on retry
    *   <li>Operation receipt has been verified
    * </ul>
    *
-   * <p>Semantics will be refined with operationId, external receipts, and uncertain-outcome
-   * handling.
+   * <p><strong>Domain commit point:</strong> The moment the delegate ToolCallback returns normally.
+   * Event emission failure, ledger append failure, or evidence capture failure does NOT change this
+   * fact.
+   *
+   * <p><strong>Concurrent resume behavior:</strong> If multiple runtimes execute the same approved
+   * tool batch (at-least-once semantics), each successful invocation produces a separate
+   * TOOL_EXECUTED event. This is truthful historical recording, not duplicate detection.
    */
   TOOL_EXECUTED,
 
   /**
-   * Framework-observed tool callback execution failed.
+   * Framework observed the ToolCallback invocation throw.
    *
-   * <p><strong>Provisional semantics:</strong> The tool callback invoked by the framework threw an
-   * exception or returned an error. Semantics will be refined with failure classification and retry
-   * boundaries.
+   * <p><strong>M6-T2B semantics:</strong> The delegate ToolCallback threw an exception. The
+   * framework observed a failed tool invocation.
+   *
+   * <p><strong>This does NOT prove:</strong>
+   *
+   * <ul>
+   *   <li>External side effect did not occur
+   *   <li>External system performed rollback
+   *   <li>Retry is safe
+   *   <li>External state is unchanged
+   * </ul>
+   *
+   * <p><strong>Domain commit point:</strong> The moment the delegate ToolCallback throws. Event
+   * emission failure, ledger append failure, or evidence capture failure does NOT change this fact.
+   *
+   * <p><strong>Evidence vs Event distinction:</strong> Evidence capture failure (e.g.,
+   * Evidence.createFailed() throws) does NOT become TOOL_FAILED. Only actual delegate exception
+   * determines TOOL_FAILED.
    */
   TOOL_FAILED,
 

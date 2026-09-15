@@ -30,7 +30,7 @@ class ProtocolReconstructorTest {
   @Test
   void executeApprovedBatch_reconstructsProtocolWithNewToolInstances() {
     // GIVEN: Checkpoint DTO with pending tool call
-    PendingToolCall dto = new PendingToolCall("call_001", "investigate", "{}");
+    PendingToolCall dto = new PendingToolCall("test-op-X", "call_001", "investigate", "{}");
     List<PendingToolCall> pendingBatch = List.of(dto);
 
     // GIVEN: NEW tool callback instance (simulates runtime restart)
@@ -42,11 +42,17 @@ class ProtocolReconstructorTest {
     List<Evidence> checkpointEvidences = List.of(new Evidence("previous", "data"));
     List<Evidence> newEvidences = Collections.synchronizedList(new ArrayList<>());
 
-    // WHEN: Execute approved batch via reconstructor
-    ProtocolReconstructor reconstructor = new ProtocolReconstructor(List.of(newToolInstance));
+    // WHEN: Execute approved batch via reconstructor (no events for unit test)
+    InMemoryInvocationStateStore store = new InMemoryInvocationStateStore();
+    ProtocolReconstructor reconstructor = new ProtocolReconstructor(List.of(newToolInstance), store);
+
+    // M6-T4A.1: Must provide ToolObservationContext (mandatory for invocation gate)
+    ToolObservationContext observationContext =
+        new ToolObservationContext("test-proc", 1L, "test-base-op", event -> {});
+
     List<Message> continuationMessages =
         reconstructor.executeApprovedBatch(
-            pendingBatch, conversationHistory, checkpointEvidences, newEvidences);
+            pendingBatch, conversationHistory, checkpointEvidences, newEvidences, observationContext);
 
     // THEN: Tool executed with NEW instance
     assertThat(executionCount.get()).isEqualTo(1);
@@ -71,17 +77,24 @@ class ProtocolReconstructorTest {
 
   @Test
   void executeApprovedBatch_preservesToolName() {
-    PendingToolCall dto = new PendingToolCall("call_002", "analyze", "{}");
+    PendingToolCall dto = new PendingToolCall("test-op-X", "call_002", "analyze", "{}");
     AtomicInteger executionCount = new AtomicInteger(0);
     ToolCallback tool = createTool("analyze", executionCount);
 
-    ProtocolReconstructor reconstructor = new ProtocolReconstructor(List.of(tool));
+    InMemoryInvocationStateStore store = new InMemoryInvocationStateStore();
+    ProtocolReconstructor reconstructor = new ProtocolReconstructor(List.of(tool), store);
+
+    // M6-T4A.1: Must provide ToolObservationContext (mandatory for invocation gate)
+    ToolObservationContext observationContext =
+        new ToolObservationContext("test-proc", 1L, "test-base-op", event -> {});
+
     List<Message> result =
         reconstructor.executeApprovedBatch(
             List.of(dto),
             List.of(new UserMessage("test")),
             List.of(),
-            Collections.synchronizedList(new ArrayList<>()));
+            Collections.synchronizedList(new ArrayList<>()),
+            observationContext);
 
     assertThat(executionCount.get()).isEqualTo(1);
 
@@ -97,19 +110,24 @@ class ProtocolReconstructorTest {
 
   @Test
   void executeApprovedBatch_executesBatchWithMultipleTools() {
-    PendingToolCall dto1 = new PendingToolCall("call_003", "toolA", "{}");
-    PendingToolCall dto2 = new PendingToolCall("call_004", "toolB", "{}");
+    PendingToolCall dto1 = new PendingToolCall("test-op-X", "call_003", "toolA", "{}");
+    PendingToolCall dto2 = new PendingToolCall("test-op-X", "call_004", "toolB", "{}");
 
     AtomicInteger countA = new AtomicInteger(0);
     AtomicInteger countB = new AtomicInteger(0);
     ToolCallback toolA = createTool("toolA", countA);
     ToolCallback toolB = createTool("toolB", countB);
 
-    ProtocolReconstructor reconstructor = new ProtocolReconstructor(List.of(toolA, toolB));
+    InMemoryInvocationStateStore store = new InMemoryInvocationStateStore();
+    ProtocolReconstructor reconstructor = new ProtocolReconstructor(List.of(toolA, toolB), store);
     List<Evidence> newEvidences = Collections.synchronizedList(new ArrayList<>());
 
+    // M6-T4A.1: Must provide ToolObservationContext (mandatory for invocation gate)
+    ToolObservationContext observationContext =
+        new ToolObservationContext("test-proc", 1L, "test-base-op", event -> {});
+
     reconstructor.executeApprovedBatch(
-        List.of(dto1, dto2), List.of(new UserMessage("test")), List.of(), newEvidences);
+        List.of(dto1, dto2), List.of(new UserMessage("test")), List.of(), newEvidences, observationContext);
 
     assertThat(countA.get()).isEqualTo(1);
     assertThat(countB.get()).isEqualTo(1);
@@ -118,11 +136,12 @@ class ProtocolReconstructorTest {
 
   @Test
   void constructDenialResponses_createsRejectionWithoutExecution() {
-    PendingToolCall dto = new PendingToolCall("call_005", "dangerous", "{}");
+    PendingToolCall dto = new PendingToolCall("test-op-X", "call_005", "dangerous", "{}");
     AtomicInteger executionCount = new AtomicInteger(0);
     ToolCallback tool = createTool("dangerous", executionCount);
 
-    ProtocolReconstructor reconstructor = new ProtocolReconstructor(List.of(tool));
+    InMemoryInvocationStateStore store = new InMemoryInvocationStateStore();
+    ProtocolReconstructor reconstructor = new ProtocolReconstructor(List.of(tool), store);
     List<Message> result =
         reconstructor.constructDenialResponses(
             List.of(dto), List.of(new UserMessage("test")));
@@ -156,15 +175,16 @@ class ProtocolReconstructorTest {
 
   @Test
   void constructDenialResponses_handlesBatchRejection() {
-    PendingToolCall dto1 = new PendingToolCall("call_006", "toolA", "{}");
-    PendingToolCall dto2 = new PendingToolCall("call_007", "toolB", "{}");
+    PendingToolCall dto1 = new PendingToolCall("test-op-X", "call_006", "toolA", "{}");
+    PendingToolCall dto2 = new PendingToolCall("test-op-X", "call_007", "toolB", "{}");
 
     AtomicInteger countA = new AtomicInteger(0);
     AtomicInteger countB = new AtomicInteger(0);
     ToolCallback toolA = createTool("toolA", countA);
     ToolCallback toolB = createTool("toolB", countB);
 
-    ProtocolReconstructor reconstructor = new ProtocolReconstructor(List.of(toolA, toolB));
+    InMemoryInvocationStateStore store = new InMemoryInvocationStateStore();
+    ProtocolReconstructor reconstructor = new ProtocolReconstructor(List.of(toolA, toolB), store);
     List<Message> result =
         reconstructor.constructDenialResponses(
             List.of(dto1, dto2), List.of(new UserMessage("test")));

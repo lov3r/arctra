@@ -94,7 +94,7 @@ class DurableResumeGovernanceTest {
             1L,
             "test-key",
             "session-1",
-            List.of(new PendingToolCall("tc-1", "toolA", "{}")),
+            List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
             List.of());
 
     store.checkpoints.put("process-1", checkpoint);
@@ -158,7 +158,7 @@ class DurableResumeGovernanceTest {
             1L,
             "test-key",
             "session-1",
-            List.of(new PendingToolCall("tc-1", "toolA", "{}")),
+            List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
             List.of());
 
     store.checkpoints.put("process-1", checkpoint);
@@ -248,7 +248,7 @@ class DurableResumeGovernanceTest {
             1L,
             "test-key",
             "session-1",
-            List.of(new PendingToolCall("tc-1", "toolA", "{}")),
+            List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
             List.of());
 
     store.checkpoints.put("process-1", checkpoint);

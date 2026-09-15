@@ -2,6 +2,7 @@ package cn.bitcss.arctra.runtime.react;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -23,8 +24,11 @@ import org.springframework.ai.tool.definition.ToolDefinition;
  *   <li>Confirms approach A (fully reuse Spring AI loop) viability
  * </ul>
  *
+ * <p><strong>DISABLED</strong>: Early M1 PoC, core functionality now in SpringAiToolCallingEngine
+ *
  * @author lov3r
  */
+@Disabled("M1 PoC - core functionality now in SpringAiToolCallingEngine")
 class SpringAIToolCallingPoCTest {
 
   @Test

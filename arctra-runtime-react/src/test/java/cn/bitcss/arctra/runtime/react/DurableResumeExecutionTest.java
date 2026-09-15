@@ -395,7 +395,7 @@ class DurableResumeExecutionTest {
         version,
         bindingKey,
         sessionId,
-        List.of(new PendingToolCall("tc-1", "testTool", "{}")),
+        List.of(new PendingToolCall("test-op-1", "tc-1", "testTool", "{}")),
         List.of());
   }
 
