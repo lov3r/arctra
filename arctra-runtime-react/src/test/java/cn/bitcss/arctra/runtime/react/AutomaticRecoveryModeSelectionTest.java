@@ -131,11 +131,11 @@ class AutomaticRecoveryModeSelectionTest {
 
     DefaultAgentRuntime runtimeA = new DefaultAgentRuntime(engineA);
 
-    // Create Engine B (different instance)
+    // Create Engine B (different instance, but with same tool to allow resumption)
     SpringAiToolCallingEngine engineB =
         new SpringAiToolCallingEngine(
-            createModelRequiringApproval("toolB"),
-            List.of(createTestTool("toolB", new AtomicInteger())),
+            createModelRequiringApproval("toolA"),
+            List.of(createTestTool("toolA", new AtomicInteger())),
             memory,
             (name, args, ctx) -> GovernanceDecision.REQUIRE_APPROVAL,
             store,
@@ -237,6 +237,22 @@ class AutomaticRecoveryModeSelectionTest {
 
   private static class TestCheckpointStore implements CheckpointStore {
     private final List<SuspensionCheckpoint> checkpoints = new ArrayList<>();
+    private final InvocationStateStore pairedStateStore;
+
+    TestCheckpointStore() {
+      this(null);
+    }
+
+    TestCheckpointStore(InvocationStateStore pairedStateStore) {
+      this.pairedStateStore = pairedStateStore;
+    }
+
+    /**
+     * Expose paired state store for test inspection.
+     */
+    public InvocationStateStore getPairedStateStore() {
+      return pairedStateStore;
+    }
 
     @Override
     public void create(SuspensionCheckpoint checkpoint) {
@@ -350,14 +366,22 @@ class AutomaticRecoveryModeSelectionTest {
     ToolGovernancePolicy policy = (name, args, ctx) -> GovernanceDecision.ALLOW;
     RuntimeBindingResolver resolver = createTestResolver();
 
-    // Use reflection or test constructor to inject state store
-    // For now, create engine normally (state store pairing will handle it)
+    // Create TestCheckpointStore with paired state store
+    TestCheckpointStore pairedStore = new TestCheckpointStore(stateStore);
+    // Copy existing checkpoints
+    if (checkpointStore instanceof TestCheckpointStore) {
+      TestCheckpointStore existingStore = (TestCheckpointStore) checkpointStore;
+      for (SuspensionCheckpoint cp : existingStore.checkpoints) {
+        pairedStore.create(cp);
+      }
+    }
+
     return new SpringAiToolCallingEngine(
         model,
         List.of(tool),
         memory,
         policy,
-        checkpointStore,
+        pairedStore,
         resolver,
         BINDING_KEY);
   }

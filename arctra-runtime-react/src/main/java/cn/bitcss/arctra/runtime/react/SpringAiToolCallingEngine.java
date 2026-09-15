@@ -275,6 +275,17 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
       return new JdbcInvocationStateStore(jdbcStore.getDataSource());
     }
 
+    // Test support: Check if checkpoint store exposes a paired state store
+    try {
+      var method = checkpointStore.getClass().getMethod("getPairedStateStore");
+      var pairedStore = method.invoke(checkpointStore);
+      if (pairedStore instanceof InvocationStateStore) {
+        return (InvocationStateStore) pairedStore;
+      }
+    } catch (Exception ignored) {
+      // Not a test store with paired state store, continue to fallback
+    }
+
     // Unknown/custom checkpoint store - safe fallback to in-memory
     // NOTE: This means custom persistent CheckpointStore implementations
     // will NOT get restart-durable recovery guarantees unless explicitly
