@@ -46,7 +46,8 @@ class DurableResumeCoordinatorTest {
     assertThatThrownBy(
             () ->
                 coordinator.resume(
-                    "missing-process", 1L, new ContinuationSignal.ApprovalSignal(true, "user")))
+                    "missing-process", 1L, new ContinuationSignal.ApprovalSignal(true, "user"),
+                    ExecutionIncarnation.current()))
         .isInstanceOf(cn.bitcss.arctra.checkpoint.CheckpointNotFoundException.class)
         .hasMessageContaining("missing-process");
 
@@ -72,7 +73,8 @@ class DurableResumeCoordinatorTest {
     assertThatThrownBy(
             () ->
                 coordinator.resume(
-                    "process-1", 3L, new ContinuationSignal.ApprovalSignal(true, "user")))
+                    "process-1", 3L, new ContinuationSignal.ApprovalSignal(true, "user"),
+                    ExecutionIncarnation.current()))
         .isInstanceOf(cn.bitcss.arctra.checkpoint.StaleCheckpointException.class)
         .hasMessageContaining("3")
         .hasMessageContaining("5");
@@ -99,7 +101,8 @@ class DurableResumeCoordinatorTest {
     assertThatThrownBy(
             () ->
                 coordinator.resume(
-                    "process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user")))
+                    "process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user"),
+                    ExecutionIncarnation.current()))
         .isInstanceOf(cn.bitcss.arctra.runtime.ResumePreparationException.class)
         .hasMessageContaining("process-1")
         .hasMessageContaining("binding-key-1");
@@ -132,7 +135,8 @@ class DurableResumeCoordinatorTest {
         new InvocationRecoveryClassifier(new InMemoryInvocationStateStore()));
 
     AgentResult result =
-        coordinator.resume("process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user"));
+        coordinator.resume("process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user"),
+            ExecutionIncarnation.current());
 
     assertThat(events.eventTypes())
         .containsExactly(EventType.APPROVAL_GRANTED, EventType.RESUMED, EventType.COMPLETED);
@@ -159,7 +163,8 @@ class DurableResumeCoordinatorTest {
         new InvocationRecoveryClassifier(new InMemoryInvocationStateStore()));
 
     AgentResult result =
-        coordinator.resume("process-1", 1L, new ContinuationSignal.ApprovalSignal(false, "user"));
+        coordinator.resume("process-1", 1L, new ContinuationSignal.ApprovalSignal(false, "user"),
+            ExecutionIncarnation.current());
 
     assertThat(events.eventTypes())
         .containsExactly(EventType.APPROVAL_REJECTED, EventType.RESUMED, EventType.COMPLETED);
@@ -186,7 +191,8 @@ class DurableResumeCoordinatorTest {
         new InvocationRecoveryClassifier(new InMemoryInvocationStateStore()));
 
     AgentResult result =
-        coordinator.resume("process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user"));
+        coordinator.resume("process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user"),
+            ExecutionIncarnation.current());
 
     // CHECK B deleted checkpoint
     assertThat(store.load("process-1")).isNotPresent();
@@ -216,7 +222,8 @@ class DurableResumeCoordinatorTest {
     assertThatThrownBy(
             () ->
                 coordinator.resume(
-                    "process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user")))
+                    "process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user"),
+                    ExecutionIncarnation.current()))
         .isInstanceOf(cn.bitcss.arctra.checkpoint.CheckpointTransitionConflictException.class);
 
     assertThat(events.hasEvent(EventType.CHECKPOINT_CONFLICT)).isTrue();
@@ -254,7 +261,8 @@ class DurableResumeCoordinatorTest {
         new InvocationRecoveryClassifier(new InMemoryInvocationStateStore()));
 
     AgentResult result =
-        coordinator.resume("process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user"));
+        coordinator.resume("process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user"),
+            ExecutionIncarnation.current());
 
     // Verify event sequence
     assertThat(events.eventTypes())
@@ -300,7 +308,8 @@ class DurableResumeCoordinatorTest {
     assertThatThrownBy(
             () ->
                 coordinator.resume(
-                    "process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user")))
+                    "process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user"),
+                    ExecutionIncarnation.current()))
         .isInstanceOf(cn.bitcss.arctra.checkpoint.CheckpointTransitionConflictException.class);
 
     assertThat(events.hasEvent(EventType.APPROVAL_REQUIRED)).isTrue();
@@ -328,7 +337,8 @@ class DurableResumeCoordinatorTest {
     assertThatThrownBy(
             () ->
                 coordinator.resume(
-                    "process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user")))
+                    "process-1", 1L, new ContinuationSignal.ApprovalSignal(true, "user"),
+                    ExecutionIncarnation.current()))
         .isInstanceOf(RuntimeException.class)
         .hasMessageContaining("Handler failure");
 

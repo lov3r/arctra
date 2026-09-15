@@ -61,7 +61,7 @@ class JdbcDurableRecoveryPairTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-durable", "tc-1", "query_logs", "{}")),
-            List.of());
+            List.of(), "test-epoch");
 
     checkpointStoreA.create(checkpoint);
     intentStoreA.recordInvocationIntent("proc-restart-pair", "op-durable");
@@ -94,7 +94,7 @@ class JdbcDurableRecoveryPairTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
-            List.of());
+            List.of(), "test-epoch");
 
     checkpointStore.create(checkpoint);
     intentStore.recordInvocationIntent("proc-same-ds", "op-1");
@@ -134,7 +134,7 @@ class JdbcDurableRecoveryPairTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-raw", "tc-1", "tool", "{}")),
-            List.of());
+            List.of(), "test-epoch");
 
     checkpointStore.create(checkpoint);
 
@@ -163,7 +163,7 @@ class JdbcDurableRecoveryPairTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-orphan", "tc-1", "tool", "{}")),
-            List.of());
+            List.of(), "test-epoch");
 
     checkpointStore.create(checkpoint);
     intentStore.recordInvocationIntent("proc-orphan", "op-orphan");
@@ -193,7 +193,7 @@ class JdbcDurableRecoveryPairTest {
                 new PendingToolCall("op-1", "tc-1", "tool-a", "{}"),
                 new PendingToolCall("op-2", "tc-2", "tool-b", "{}"),
                 new PendingToolCall("op-3", "tc-3", "tool-c", "{}")),
-            List.of());
+            List.of(), "test-epoch");
 
     checkpointStore.create(checkpoint);
 
@@ -221,7 +221,7 @@ class JdbcDurableRecoveryPairTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-mixed", "tc-1", "tool", "{}")),
-            List.of());
+            List.of(), "test-epoch");
 
     inMemoryCheckpoint.create(checkpoint);
     jdbcIntent.recordInvocationIntent("proc-mixed", "op-mixed");

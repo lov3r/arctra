@@ -67,6 +67,7 @@ public final class TestCheckpoints {
    *   <li>Standard binding key
    *   <li>Standard session ID
    *   <li>Empty accumulated evidences
+   *   <li>Current execution epoch (M6-T4F)
    * </ul>
    *
    * @param processId process identifier (explicit - test-critical)
@@ -88,6 +89,7 @@ public final class TestCheckpoints {
    *   <li>Standard binding key
    *   <li>Standard session ID
    *   <li>Empty accumulated evidences
+   *   <li>Current execution epoch (M6-T4F)
    * </ul>
    *
    * <p>Use this when testing version-specific behavior (e.g., CHECK A stale version, re-suspension
@@ -107,7 +109,8 @@ public final class TestCheckpoints {
         STANDARD_BINDING_KEY,
         STANDARD_SESSION_ID,
         pendingBatch,
-        List.of());
+        List.of(),
+        ExecutionIncarnation.current()); // M6-T4F: current epoch
   }
 
   /**
@@ -131,7 +134,8 @@ public final class TestCheckpoints {
         STANDARD_BINDING_KEY,
         sessionId,
         pendingBatch,
-        List.of());
+        List.of(),
+        ExecutionIncarnation.current()); // M6-T4F
   }
 
   /**
@@ -160,7 +164,8 @@ public final class TestCheckpoints {
         bindingKey,
         sessionId,
         pendingBatch,
-        List.of());
+        List.of(),
+        ExecutionIncarnation.current()); // M6-T4F
   }
 
   /**
@@ -224,6 +229,31 @@ public final class TestCheckpoints {
         bindingKey,
         sessionId,
         List.of(new PendingToolCall(testOperationId(0), "tc-dummy", "dummyTool", "{}")),
-        evidences);
+        evidences,
+        ExecutionIncarnation.current()); // M6-T4F
+  }
+
+  /**
+   * Create checkpoint with custom execution epoch (M6-T4F test helper).
+   *
+   * <p>Use for testing cross-incarnation recovery mode selection.
+   *
+   * @param processId process identifier
+   * @param version checkpoint version
+   * @param executionEpoch custom execution epoch
+   * @return checkpoint with custom epoch
+   * @since M6-T4F
+   */
+  public static SuspensionCheckpoint withEpoch(
+      String processId, long version, String executionEpoch) {
+    return new SuspensionCheckpoint(
+        SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+        processId,
+        version,
+        STANDARD_BINDING_KEY,
+        STANDARD_SESSION_ID,
+        List.of(new PendingToolCall(testOperationId(0), "tc-dummy", "dummyTool", "{}")),
+        List.of(),
+        executionEpoch);
   }
 }

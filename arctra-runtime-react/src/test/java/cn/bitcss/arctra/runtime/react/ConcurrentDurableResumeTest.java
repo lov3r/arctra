@@ -214,7 +214,7 @@ class ConcurrentDurableResumeTest {
             BINDING_KEY,
             SESSION_ID,
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolX", "{}")),
-            List.of());
+            List.of(), "test-epoch");
     store.create(cp1);
 
     // Two runtimes with independent resources
@@ -334,7 +334,7 @@ class ConcurrentDurableResumeTest {
             BINDING_KEY,
             SESSION_ID,
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolX", "{}")),
-            List.of());
+            List.of(), "test-epoch");
     store.create(cp1);
 
     // Two runtimes - both emit new toolY requiring approval
@@ -425,7 +425,7 @@ class ConcurrentDurableResumeTest {
             BINDING_KEY,
             SESSION_ID,
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolX", "{}")),
-            List.of());
+            List.of(), "test-epoch");
     store.create(cp1);
 
     // Runtime A wins race: v1 → v2

@@ -39,7 +39,7 @@ class CheckpointStoreConcurrencyTest {
             "test-key",
             "session-1",
             List.of(new PendingToolCall("test-op-init", "tc-init", "toolInit", "{}")),
-            List.of());
+            List.of(), "test-epoch");
     store.create(initial);
 
     // Two replacement candidates (both targeting v1 → v2)
@@ -51,7 +51,7 @@ class CheckpointStoreConcurrencyTest {
             "test-key",
             "session-1",
             List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
-            List.of());
+            List.of(), "test-epoch");
 
     SuspensionCheckpoint replacement2 =
         new SuspensionCheckpoint(
@@ -61,7 +61,7 @@ class CheckpointStoreConcurrencyTest {
             "test-key",
             "session-1",
             List.of(new PendingToolCall("test-op-2", "tc-2", "toolB", "{}")),
-            List.of());
+            List.of(), "test-epoch");
 
     // Concurrent execution
     CyclicBarrier barrier = new CyclicBarrier(2);
@@ -140,7 +140,7 @@ class CheckpointStoreConcurrencyTest {
             "test-key",
             "session-1",
             List.of(new PendingToolCall("test-op-init", "tc-init", "toolInit", "{}")),
-            List.of());
+            List.of(), "test-epoch");
     store.create(initial);
 
     // Concurrent deletion
@@ -195,7 +195,7 @@ class CheckpointStoreConcurrencyTest {
             "test-key",
             "session-1",
             List.of(new PendingToolCall("test-op-init", "tc-init", "toolInit", "{}")),
-            List.of());
+            List.of(), "test-epoch");
     store.create(cp1);
 
     // One thread advances v1 → v2
@@ -207,7 +207,7 @@ class CheckpointStoreConcurrencyTest {
             "test-key",
             "session-1",
             List.of(new PendingToolCall("test-op-replaced", "tc-2", "toolA", "{}")),
-            List.of());
+            List.of(), "test-epoch");
 
     // Another thread tries stale v1 → v2 (same expected v1)
     SuspensionCheckpoint cp2_stale =
@@ -218,7 +218,7 @@ class CheckpointStoreConcurrencyTest {
             "test-key",
             "session-1",
             List.of(new PendingToolCall("test-op-stale", "stale", "stale", "{}")),
-            List.of());
+            List.of(), "test-epoch");
 
     CountDownLatch latch = new CountDownLatch(1);
     AtomicInteger t1Success = new AtomicInteger(0);

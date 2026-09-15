@@ -55,7 +55,8 @@ class ExplicitRecoveryPathTest {
             "binding-test",
             "session-test",
             List.of(opA, opB),
-            List.of());
+            List.of(),
+            "epoch-original");
 
     TestCheckpointStore checkpointStore = new TestCheckpointStore();
     checkpointStore.create(checkpoint);
@@ -84,8 +85,8 @@ class ExplicitRecoveryPathTest {
 
     // When - invoke EXPLICIT recovery path with APPROVE
     AgentResult result =
-        coordinator.resumeWithRecoveryClassification(
-            "proc-test", 1L, new ContinuationSignal.ApprovalSignal(true, "test"));
+        coordinator.resume(
+            "proc-test", 1L, new ContinuationSignal.ApprovalSignal(true, "test"), "epoch-current");
 
     // Then - both operations classified as safe
     assertThat(store.readCalls)
@@ -128,7 +129,8 @@ class ExplicitRecoveryPathTest {
             "binding-test",
             "session-test",
             List.of(opA, opB),
-            List.of());
+            List.of(),
+            "epoch-original");
 
     TestCheckpointStore checkpointStore = new TestCheckpointStore();
     checkpointStore.create(checkpoint);
@@ -155,8 +157,8 @@ class ExplicitRecoveryPathTest {
     // When/Then - explicit recovery with uncertain operation
     assertThatThrownBy(
             () ->
-                coordinator.resumeWithRecoveryClassification(
-                    "proc-test", 1L, new ContinuationSignal.ApprovalSignal(true, "test")))
+                coordinator.resume(
+                    "proc-test", 1L, new ContinuationSignal.ApprovalSignal(true, "test"), "epoch-current"))
         .isInstanceOf(RecoveryUncertaintyException.class)
         .hasMessageContaining("op-B")
         .hasMessageContaining("may have already been invoked");
@@ -195,7 +197,8 @@ class ExplicitRecoveryPathTest {
             "binding-test",
             "session-test",
             List.of(opA, opB), // op-A first
-            List.of());
+            List.of(),
+            "epoch-original");
 
     TestCheckpointStore checkpointStore = new TestCheckpointStore();
     checkpointStore.create(checkpoint);
@@ -222,8 +225,8 @@ class ExplicitRecoveryPathTest {
     // When/Then - uncertain first operation
     assertThatThrownBy(
             () ->
-                coordinator.resumeWithRecoveryClassification(
-                    "proc-test", 1L, new ContinuationSignal.ApprovalSignal(true, "test")))
+                coordinator.resume(
+                    "proc-test", 1L, new ContinuationSignal.ApprovalSignal(true, "test"), "epoch-current"))
         .isInstanceOf(RecoveryUncertaintyException.class)
         .hasMessageContaining("op-A");
 
@@ -265,7 +268,8 @@ class ExplicitRecoveryPathTest {
             "binding-test",
             "session-test",
             List.of(opA),
-            List.of());
+            List.of(),
+            "epoch-original");
 
     TestCheckpointStore checkpointStore = new TestCheckpointStore();
     checkpointStore.create(checkpoint);
@@ -293,8 +297,8 @@ class ExplicitRecoveryPathTest {
     // When/Then - read failure during classification
     assertThatThrownBy(
             () ->
-                coordinator.resumeWithRecoveryClassification(
-                    "proc-test", 1L, new ContinuationSignal.ApprovalSignal(true, "test")))
+                coordinator.resume(
+                    "proc-test", 1L, new ContinuationSignal.ApprovalSignal(true, "test"), "epoch-current"))
         .isInstanceOf(RuntimeException.class)
         .hasMessageContaining("Test storage read failure");
 
@@ -333,7 +337,8 @@ class ExplicitRecoveryPathTest {
             "binding-test",
             "session-test",
             List.of(opA),
-            List.of());
+            List.of(),
+            "epoch-original");
 
     TestCheckpointStore checkpointStore = new TestCheckpointStore();
     checkpointStore.create(checkpoint);
@@ -359,8 +364,8 @@ class ExplicitRecoveryPathTest {
 
     // When - REJECT signal (explicit recovery path)
     AgentResult result =
-        coordinator.resumeWithRecoveryClassification(
-            "proc-test", 1L, new ContinuationSignal.ApprovalSignal(false, "test rejection"));
+        coordinator.resume(
+            "proc-test", 1L, new ContinuationSignal.ApprovalSignal(false, "test rejection"), "epoch-current");
 
     // Then - NO classification reads (REJECT bypasses classification gate)
     assertThat(store.readCalls)

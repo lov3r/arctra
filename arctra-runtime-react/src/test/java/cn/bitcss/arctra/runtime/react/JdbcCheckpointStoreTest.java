@@ -66,7 +66,8 @@ class JdbcCheckpointStoreTest {
             "test-key",
             "session-abc",
             List.of(new PendingToolCall("op-1", "tc-1", "query_logs", "{}")),
-            List.of(new Evidence("tool-x", "result")));
+            List.of(new Evidence("tool-x", "result")),
+            "test-epoch-001");
 
     store.create(checkpoint);
 
@@ -95,7 +96,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     store.create(checkpoint1);
 
@@ -107,7 +108,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-2", "tc-2", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     assertThatThrownBy(() -> store.create(checkpoint2))
         .isInstanceOf(CheckpointAlreadyExistsException.class)
@@ -125,7 +126,7 @@ class JdbcCheckpointStoreTest {
             "key",
             null, // null sessionId
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     store.create(checkpoint);
 
@@ -149,7 +150,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     storeA.create(checkpoint);
 
@@ -176,7 +177,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     store.create(v1);
 
@@ -188,7 +189,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-2", "tc-2", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     boolean replaced = store.replaceIfVersion("proc-replace", 1L, v2);
 
@@ -210,7 +211,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     store.create(v1);
 
@@ -222,7 +223,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-2", "tc-2", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     // Replace v1 → v2
     store.replaceIfVersion("proc-stale", 1L, v2);
@@ -236,7 +237,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-3", "tc-3", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     boolean replaced = store.replaceIfVersion("proc-stale", 1L, v3);
 
@@ -259,7 +260,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     store.create(checkpoint);
 
@@ -282,7 +283,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     store.create(checkpoint);
 
@@ -307,7 +308,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     store.create(v1);
 
@@ -323,7 +324,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-2", "tc-2", "tool-a", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     SuspensionCheckpoint v3 =
         new SuspensionCheckpoint(
@@ -333,7 +334,7 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-3", "tc-3", "tool-b", "{}")),
-            List.of());
+            List.<Evidence>of(), "test-epoch-001");
 
     CountDownLatch startLatch = new CountDownLatch(1);
     CountDownLatch doneLatch = new CountDownLatch(2);
@@ -408,7 +409,8 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall(operationId, "tc-1", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(),
+            "test-epoch-001");
 
     store.create(checkpoint);
 
@@ -428,7 +430,7 @@ class JdbcCheckpointStoreTest {
             new PendingToolCall("op-3", "tc-3", "tool-c", "{}"));
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint("1.0", "proc-multi-op", 1L, "key", "session", pending, List.of());
+        new SuspensionCheckpoint("1.0", "proc-multi-op", 1L, "key", "session", pending, List.<Evidence>of(), "test-epoch-001");
 
     store.create(checkpoint);
 
@@ -452,7 +454,8 @@ class JdbcCheckpointStoreTest {
             "key",
             "session",
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
-            List.of());
+            List.<Evidence>of(),
+            "test-epoch-001");
 
     storeA.create(checkpoint);
 

@@ -396,7 +396,7 @@ class DurableResumeExecutionTest {
         bindingKey,
         sessionId,
         List.of(new PendingToolCall("test-op-1", "tc-1", "testTool", "{}")),
-        List.of());
+        List.of(), "test-epoch");
   }
 
   private ChatMemory chatMemory() {

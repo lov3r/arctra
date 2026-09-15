@@ -270,7 +270,7 @@ class RuntimeBindingExceptionClassificationTest {
             "key",
             "session-1",
             List.of(new cn.bitcss.arctra.checkpoint.PendingToolCall("test-op-1", "tc-1", "tool", "{}")),
-            List.of());
+            List.of(), "test-epoch");
 
     store.create(checkpoint);
 

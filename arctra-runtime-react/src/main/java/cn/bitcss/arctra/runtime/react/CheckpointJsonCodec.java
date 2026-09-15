@@ -50,6 +50,8 @@ final class CheckpointJsonCodec {
   /**
    * Serialize checkpoint to JSON.
    *
+   * <p><strong>M6-T4F schema v1.1:</strong> Includes executionEpoch field.
+   *
    * @param checkpoint the checkpoint to serialize
    * @return JSON string representation
    * @throws IllegalStateException if serialization fails
@@ -88,6 +90,13 @@ final class CheckpointJsonCodec {
         evidenceNode.put("content", evidence.content());
       }
 
+      // M6-T4F: executionEpoch (v1.1)
+      if (checkpoint.executionEpoch() != null) {
+        root.put("executionEpoch", checkpoint.executionEpoch());
+      } else {
+        root.putNull("executionEpoch");
+      }
+
       return objectMapper.writeValueAsString(root);
 
     } catch (JsonProcessingException e) {
@@ -97,6 +106,9 @@ final class CheckpointJsonCodec {
 
   /**
    * Deserialize checkpoint from JSON.
+   *
+   * <p><strong>M6-T4F backward compatibility:</strong> v1.0 checkpoints without executionEpoch
+   * return null for that field.
    *
    * @param json the JSON string
    * @return deserialized checkpoint
@@ -139,6 +151,11 @@ final class CheckpointJsonCodec {
         accumulatedEvidences.add(new Evidence(source, content));
       }
 
+      // M6-T4F: executionEpoch (v1.1, nullable for v1.0 compatibility)
+      String executionEpoch = root.has("executionEpoch") && !root.path("executionEpoch").isNull()
+          ? root.path("executionEpoch").asText()
+          : null;
+
       return new SuspensionCheckpoint(
           schemaVersion,
           processId,
@@ -146,7 +163,8 @@ final class CheckpointJsonCodec {
           runtimeBindingKey,
           sessionId,
           pendingBatch,
-          accumulatedEvidences);
+          accumulatedEvidences,
+          executionEpoch);
 
     } catch (IOException e) {
       throw new IllegalStateException("Failed to deserialize checkpoint: " + e.getMessage(), e);

@@ -88,7 +88,8 @@ class DurableResumeEvidenceTest {
             "test-key",
             "session-1",
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolB", "{}")),
-            List.of(evidenceA));
+            List.of(evidenceA),
+            "test-epoch");
 
     store.checkpoints.put("process-1", checkpoint);
 
@@ -165,7 +166,8 @@ class DurableResumeEvidenceTest {
             "test-key",
             "session-1",
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolA", "{}")),
-            List.of(evidenceA));
+            List.of(evidenceA),
+            "test-epoch");
 
     store.checkpoints.put("process-1", checkpoint);
 

@@ -429,7 +429,8 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
             runtimeBindingKey,
             sessionId,
             pendingBatch,
-            List.copyOf(evidences)); // Defensive copy
+            List.copyOf(evidences), // Defensive copy
+            ExecutionIncarnation.current()); // M6-T4F: current incarnation
 
     // 5. Persist checkpoint FIRST (durability-first)
     checkpointStore.create(checkpoint);
@@ -771,8 +772,10 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
               + (runtimeBindingKey != null ? "present" : "null"));
     }
 
-    // Delegate to durable resume coordinator
-    return durableResumeCoordinator.resume(processId, checkpointVersion, signal);
+    // M6-T4F: Delegate to coordinator with current execution incarnation
+    // Mode selection occurs INSIDE CHECK A to prevent TOCTOU
+    return durableResumeCoordinator.resume(
+        processId, checkpointVersion, signal, ExecutionIncarnation.current());
   }
   /**
    * Emit an execution event through the event sink.

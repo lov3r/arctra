@@ -12,6 +12,8 @@ import cn.bitcss.arctra.execution.ExecutionEvent;
 import cn.bitcss.arctra.execution.ExecutionEventListener;
 import cn.bitcss.arctra.process.AgentProcess;
 import cn.bitcss.arctra.process.ContinuationSignal;
+import cn.bitcss.arctra.runtime.ProcessFactory;
+import cn.bitcss.arctra.runtime.ResumePreparationException;
 import cn.bitcss.arctra.runtime.RuntimeBinding;
 import cn.bitcss.arctra.runtime.RuntimeBindingResolver;
 import java.util.List;
@@ -100,12 +102,16 @@ final class DurableResumeCoordinator {
   }
 
   /**
-   * Resume durable process execution.
+   * Resume durable process execution with automatic recovery mode selection.
    *
-   * <p>Performs full durable resume orchestration:
+   * <p><strong>M6-T4F: Automatic Recovery Mode Selection (Inside CHECK A).</strong>
+   *
+   * <p>Performs full durable resume orchestration with automatic restart detection:
    *
    * <ol>
-   *   <li>CHECK A: load and validate checkpoint
+   *   <li>CHECK A: load and validate checkpoint (authoritative)
+   *   <li>Compare checkpoint.executionEpoch vs current epoch (mode selection)
+   *   <li>Route to normal resume or recovery-classified resume
    *   <li>Resolve runtime binding using checkpoint.runtimeBindingKey()
    *   <li>Validate continuation signal
    *   <li>Emit APPROVAL_GRANTED / APPROVAL_REJECTED
@@ -114,29 +120,111 @@ final class DurableResumeCoordinator {
    *   <li>Handle provider outcome (CHECK B)
    * </ol>
    *
+   * <h2>Mode Selection Semantics</h2>
+   *
+   * <ul>
+   *   <li><strong>Same incarnation:</strong> checkpoint.executionEpoch = currentExecutionEpoch →
+   *       normal resume (no invocation-state recovery reads)
+   *   <li><strong>Cross-incarnation:</strong> checkpoint.executionEpoch ≠ currentExecutionEpoch →
+   *       recovery classification (preflight intent check, fail-closed on uncertainty)
+   * </ul>
+   *
+   * <h2>TOCTOU Prevention</h2>
+   *
+   * <p>Mode selection uses the SAME checkpoint loaded by CHECK A. No pre-read. No race window.
+   *
    * @param processId process ID to resume
    * @param checkpointVersion expected checkpoint version
    * @param signal continuation signal (approved/rejected)
+   * @param currentExecutionEpoch current execution incarnation for restart detection
    * @return agent result (completed or suspended)
    * @throws cn.bitcss.arctra.checkpoint.CheckpointNotFoundException if checkpoint missing
    * @throws cn.bitcss.arctra.checkpoint.StaleCheckpointException if version mismatch
    * @throws ResumePreparationException if binding resolution fails
+   * @throws RecoveryUncertaintyException if cross-incarnation recovery encounters uncertain state
    * @throws cn.bitcss.arctra.checkpoint.CheckpointTransitionConflictException if CHECK B CAS fails
+   * @since M6-T4F
    */
-  AgentResult resume(String processId, long checkpointVersion, ContinuationSignal signal) {
+  AgentResult resume(
+      String processId,
+      long checkpointVersion,
+      ContinuationSignal signal,
+      String currentExecutionEpoch) {
 
-    // CHECK A: Load and validate checkpoint
+    // CHECK A: Load and validate checkpoint (authoritative)
     SuspensionCheckpoint checkpoint = loadAndValidateCheckpoint(processId, checkpointVersion);
 
+    // M6-T4F: Mode selection using THIS validated checkpoint (TOCTOU-safe)
+    if (requiresRecoveryMode(checkpoint, currentExecutionEpoch)) {
+      // Cross-incarnation → recovery classification pathway
+      return resumeWithRecoveryInternal(checkpoint, signal);
+    } else {
+      // Same-incarnation → normal resume pathway
+      return resumeNormalInternal(checkpoint, signal);
+    }
+  }
+
+  /**
+   * Determine whether recovery mode is required based on execution incarnation.
+   *
+   * <p><strong>M6-T4F: Restart detection authority.</strong>
+   *
+   * <p>Compares checkpoint's executionEpoch against current incarnation to detect
+   * cross-incarnation resume requiring recovery classification.
+   *
+   * <h2>v1.0 Checkpoint Handling</h2>
+   *
+   * <p>Checkpoints without executionEpoch (pre-T4F) cannot be automatically classified. Throws
+   * {@link ResumePreparationException} requiring explicit upgrade or checkpoint completion.
+   *
+   * @param checkpoint validated CHECK A checkpoint
+   * @param currentEpoch current execution incarnation
+   * @return true if cross-incarnation (recovery mode), false if same-incarnation (normal mode)
+   * @throws ResumePreparationException if checkpoint lacks executionEpoch (v1.0)
+   */
+  private boolean requiresRecoveryMode(SuspensionCheckpoint checkpoint, String currentEpoch) {
+    String checkpointEpoch = checkpoint.executionEpoch();
+
+    if (checkpointEpoch == null) {
+      // v1.0 checkpoint without executionEpoch - cannot auto-detect restart
+      throw new ResumePreparationException(
+          "Cannot auto-detect restart for pre-T4F checkpoint (schema "
+              + checkpoint.schemaVersion()
+              + ", missing executionEpoch). "
+              + "Complete or abandon checkpoint before upgrading to T4F, "
+              + "or use explicit recovery activation. "
+              + "Process: "
+              + checkpoint.processId()
+              + ", version: "
+              + checkpoint.checkpointVersion());
+    }
+
+    // Compare epochs: different = cross-incarnation = recovery mode
+    return !checkpointEpoch.equals(currentEpoch);
+  }
+
+  /**
+   * Normal resume pathway (same-incarnation).
+   *
+   * <p><strong>M6-T4F: Zero recovery-classification reads.</strong>
+   *
+   * <p>Used when checkpoint was created by same execution incarnation. Executes with normal
+   * at-least-once semantics without invocation-state recovery reads.
+   *
+   * @param checkpoint validated CHECK A checkpoint
+   * @param signal continuation signal
+   * @return agent result
+   */
+  private AgentResult resumeNormalInternal(SuspensionCheckpoint checkpoint, ContinuationSignal signal) {
     // Resolve RuntimeBinding using checkpoint.runtimeBindingKey()
-    RuntimeBinding binding = resolveBinding(processId, checkpoint);
+    RuntimeBinding binding = resolveBinding(checkpoint.processId(), checkpoint);
 
     // Validate signal and emit approval event
-    validateAndEmitApproval(processId, checkpoint.checkpointVersion(), signal);
+    validateAndEmitApproval(checkpoint.processId(), checkpoint.checkpointVersion(), signal);
 
     // M6-T2A: RESUMED domain fact becomes TRUE
     emitEvent(
-        processId,
+        checkpoint.processId(),
         EventType.RESUMED,
         checkpoint.checkpointVersion(),
         String.format(
@@ -145,12 +233,11 @@ final class DurableResumeCoordinator {
 
     // Delegate to resumed execution handler
     List<Evidence> historicalEvidences = checkpoint.accumulatedEvidences();
-    // M6-T3B: Base observation context (per-operation contexts created during execution)
     ToolObservationContext baseObservationContext =
         new ToolObservationContext(
-            processId,
+            checkpoint.processId(),
             checkpoint.checkpointVersion(),
-            "resume-base", // Placeholder - will be replaced per-operation
+            "resume-base",
             eventListener);
 
     ResumedExecutionOutcome outcome =
@@ -167,31 +254,16 @@ final class DurableResumeCoordinator {
   }
 
   /**
-   * Resume durable process with explicit recovery classification.
+   * Recovery-classified resume pathway (cross-incarnation).
    *
-   * <p><strong>M6-T4C Phase 1: Explicit recovery pathway (package-private internal).</strong>
+   * <p><strong>M6-T4F: Preflight invocation-state classification.</strong>
    *
-   * <p>This is an INTERNAL recovery pathway that adds preflight invocation-state classification
-   * before execution. It performs the same orchestration as {@link #resume(String, long,
-   * ContinuationSignal)} but with recovery classification gate.
-   *
-   * <h2>Recovery Classification Gate</h2>
-   *
-   * <p>After CHECK A, classifies each pending approved operation:
-   *
-   * <ul>
-   *   <li>{@link InvocationRecoveryClassification#DEFINITELY_NOT_DISPATCHED}: Safe to execute (no
-   *       intent)
-   *   <li>{@link InvocationRecoveryClassification#MAY_HAVE_INVOKED}: Uncertain (intent exists) →
-   *       fail closed
-   * </ul>
-   *
-   * <p><strong>Batch preflight:</strong> ALL operations classified BEFORE any physical execution.
-   * If ANY operation has uncertain state, NO operations execute.
+   * <p>Used when checkpoint was created by different execution incarnation (restart detected).
+   * Performs preflight recovery classification before any physical tool invocation.
    *
    * <h2>Phase 1 Fail-Closed Policy</h2>
    *
-   * <p>If any operation classified {@code MAY_HAVE_INVOKED}:
+   * <p>If any operation has uncertain state (MAY_HAVE_INVOKED):
    *
    * <ul>
    *   <li>Throw {@link RecoveryUncertaintyException}
@@ -200,69 +272,43 @@ final class DurableResumeCoordinator {
    *   <li>Manual investigation required
    * </ul>
    *
-   * <p>This is NOT retry policy. It is safety boundary while recovery policy does not exist.
-   *
-   * <h2>Normal Resume Unchanged</h2>
-   *
-   * <p>This pathway does NOT affect {@link #resume(String, long, ContinuationSignal)}. Normal
-   * concurrent resume remains at-least-once without invocation-state reads.
-   *
-   * <h2>Activation</h2>
-   *
-   * <p>Phase 1: Manual/explicit only (test or operator).
-   *
-   * <p>Phase 2 (future): Automatic restart detection when persistent stores exist.
-   *
-   * <h2>REJECT Behavior</h2>
-   *
-   * <p>Rejection synthesizes responses without physical tool invocation, so recovery classification
-   * is NOT needed for REJECT signals. Classification gate only activated for APPROVE.
-   *
-   * @param processId process ID to resume
-   * @param checkpointVersion expected checkpoint version
-   * @param signal continuation signal (approved/rejected)
-   * @return agent result (completed or suspended)
-   * @throws cn.bitcss.arctra.checkpoint.CheckpointNotFoundException if checkpoint missing
-   * @throws cn.bitcss.arctra.checkpoint.StaleCheckpointException if version mismatch
-   * @throws ResumePreparationException if binding resolution fails
-   * @throws RecoveryUncertaintyException if any operation has MAY_HAVE_INVOKED status
-   * @throws cn.bitcss.arctra.checkpoint.CheckpointTransitionConflictException if CHECK B conflicts
-   * @since M6-T4C Phase 1
+   * @param checkpoint validated CHECK A checkpoint
+   * @param signal continuation signal
+   * @return agent result
+   * @throws RecoveryUncertaintyException if any operation MAY_HAVE_INVOKED
    */
-  AgentResult resumeWithRecoveryClassification(
-      String processId, long checkpointVersion, ContinuationSignal signal) {
+  private AgentResult resumeWithRecoveryInternal(
+      SuspensionCheckpoint checkpoint, ContinuationSignal signal) {
 
-    // CHECK A: Load and validate checkpoint (reuse existing authority)
-    SuspensionCheckpoint checkpoint = loadAndValidateCheckpoint(processId, checkpointVersion);
-
-    // Resolve runtime binding (reuse existing logic)
-    RuntimeBinding binding = resolveBinding(processId, checkpoint);
+    // Resolve binding first (needed for execution)
+    RuntimeBinding binding = resolveBinding(checkpoint.processId(), checkpoint);
 
     // RECOVERY CLASSIFICATION GATE (M6-T4C Phase 1)
     // Only for APPROVE - REJECT does not invoke tools physically
-    if (signal instanceof ContinuationSignal.ApprovalSignal approvalSignal && approvalSignal.approved()) {
-      classifyApprovedBatchOrFailClosed(processId, checkpoint.pendingBatch());
+    if (signal instanceof ContinuationSignal.ApprovalSignal approvalSignal
+        && approvalSignal.approved()) {
+      classifyApprovedBatchOrFailClosed(checkpoint.processId(), checkpoint.pendingBatch());
     }
 
-    // Validate and emit approval event (reuse existing logic)
-    validateAndEmitApproval(processId, checkpoint.checkpointVersion(), signal);
+    // After classification gate passed, continue with normal orchestration
+    validateAndEmitApproval(checkpoint.processId(), checkpoint.checkpointVersion(), signal);
 
     // M6-T2A: RESUMED domain fact becomes TRUE
     emitEvent(
-        processId,
+        checkpoint.processId(),
         EventType.RESUMED,
         checkpoint.checkpointVersion(),
         String.format(
-            "{\"checkpointVersion\": %d, \"runtimeBindingKey\": \"%s\"}",
+            "{\"checkpointVersion\": %d, \"runtimeBindingKey\": \"%s\", \"recoveryMode\": true}",
             checkpoint.checkpointVersion(), checkpoint.runtimeBindingKey()));
 
-    // Delegate to resumed execution handler (reuse existing orchestration)
+    // Delegate to resumed execution handler (same as normal path)
     List<Evidence> historicalEvidences = checkpoint.accumulatedEvidences();
     ToolObservationContext baseObservationContext =
         new ToolObservationContext(
-            processId,
+            checkpoint.processId(),
             checkpoint.checkpointVersion(),
-            "resume-base",
+            "resume-recovery",
             eventListener);
 
     ResumedExecutionOutcome outcome =
@@ -273,10 +319,11 @@ final class DurableResumeCoordinator {
             signal,
             baseObservationContext);
 
-    // Handle provider outcome with CHECK B (reuse existing logic)
+    // Handle provider outcome with CHECK B (same as normal path)
     return handleResumedExecutionOutcome(
         outcome, checkpoint, binding.definition(), binding.context());
   }
+
 
   /**
    * Classify approved batch or fail closed on uncertainty.
@@ -513,7 +560,8 @@ final class DurableResumeCoordinator {
             oldCheckpoint.runtimeBindingKey(), // Preserve from checkpoint
             oldCheckpoint.sessionId(),
             suspended.pendingBatch(),
-            suspended.evidences());
+            suspended.evidences(),
+            cn.bitcss.arctra.runtime.react.ExecutionIncarnation.current()); // M6-T4F: rollover to current
 
     // CHECK B: Replace checkpoint (CAS)
     boolean replaced =
