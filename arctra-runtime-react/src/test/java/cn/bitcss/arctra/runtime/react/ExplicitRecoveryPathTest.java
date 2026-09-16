@@ -15,6 +15,7 @@ import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.execution.ExecutionEvent;
 import cn.bitcss.arctra.execution.ExecutionEventListener;
 import cn.bitcss.arctra.process.ContinuationSignal;
+import cn.bitcss.arctra.recovery.RecoveryUncertaintyException;
 import cn.bitcss.arctra.runtime.DurableExecutionEngine;
 import cn.bitcss.arctra.runtime.RuntimeBinding;
 import cn.bitcss.arctra.runtime.RuntimeBindingResolver;
@@ -161,7 +162,7 @@ class ExplicitRecoveryPathTest {
                     "proc-test", 1L, new ContinuationSignal.ApprovalSignal(true, "test"), "epoch-current"))
         .isInstanceOf(RecoveryUncertaintyException.class)
         .hasMessageContaining("op-B")
-        .hasMessageContaining("may have already been invoked");
+        .hasMessageContaining("unresolved physical attempt");
 
     // Then - CRITICAL: zero physical invocations (batch preflight prevented ALL execution)
     assertThat(delegateCallCount.get())
@@ -254,12 +255,13 @@ class ExplicitRecoveryPathTest {
 
           @Override
           public boolean hasInvocationIntent(String processId, String operationId, String attemptId) {
-            throw new RuntimeException("Test storage read failure");
+            // Not used in M6-T5 (uses findAttempts instead)
+            return false;
           }
 
           @Override
           public java.util.List<InvocationAttempt> findAttempts(String processId, String operationId) {
-            return java.util.List.of();
+            throw new RuntimeException("Test storage read failure");
           }
 
           @Override
@@ -426,6 +428,7 @@ class ExplicitRecoveryPathTest {
     @Override
     public java.util.List<cn.bitcss.arctra.runtime.react.InvocationAttempt> findAttempts(
         String processId, String operationId) {
+      readCalls.add(processId + ":" + operationId);
       return delegate.findAttempts(processId, operationId);
     }
 

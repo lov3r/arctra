@@ -136,6 +136,10 @@ class InvocationIntentGateTest {
     ToolObservationContext observationContext =
         new ToolObservationContext("proc-test", 1L, "op-123", event -> {});
 
+    // Given - classification: no prior attempts (DEFINITELY_NOT_DISPATCHED)
+    RecoveryClassificationResult classification =
+        new DefinitelyNotDispatched("op-123");
+
     // When - execute with successful store
     List<Message> result =
         reconstructor.executeApprovedBatch(
@@ -144,17 +148,18 @@ class InvocationIntentGateTest {
             checkpointEvidences,
             newEvidences,
             observationContext,
-            List.of());
+            List.of(classification));
 
     // Then - delegate WAS called (after successful intent recording)
     assertThat(delegateCallCount.get())
         .as("Delegate should be invoked after successful intent recording")
         .isEqualTo(1);
 
-    // Then - intent was recorded
-    assertThat(successfulStore.hasInvocationIntent("proc-test", "op-123", "attempt-test"))
-        .as("Intent should be recorded before execution")
-        .isTrue();
+    // Then - intent was recorded (with dynamically generated attemptId)
+    List<InvocationAttempt> attempts = successfulStore.findAttempts("proc-test", "op-123");
+    assertThat(attempts)
+        .as("At least one attempt should be recorded")
+        .isNotEmpty();
 
     // Then - result constructed
     assertThat(result).as("Result messages should be constructed").isNotEmpty();
@@ -219,9 +224,13 @@ class InvocationIntentGateTest {
     ToolObservationContext observationContext =
         new ToolObservationContext("proc-test", 1L, "op-123", event -> {});
 
+    // Given - classification: no prior attempts (DEFINITELY_NOT_DISPATCHED)
+    RecoveryClassificationResult classification =
+        new DefinitelyNotDispatched("op-123");
+
     // When
     reconstructor.executeApprovedBatch(
-        List.of(pendingOp), List.of(), List.of(), new ArrayList<>(), observationContext, List.of());
+        List.of(pendingOp), List.of(), List.of(), new ArrayList<>(), observationContext, List.of(classification));
 
     // Then - intent recorded BEFORE delegate called
     assertThat(executionOrder)
@@ -257,18 +266,23 @@ class InvocationIntentGateTest {
     PendingToolCall pendingOp =
         new PendingToolCall("op-123", "tc-123", "test-tool", "{}");
 
+    // Given - classification: no prior attempts (DEFINITELY_NOT_DISPATCHED)
+    RecoveryClassificationResult classification =
+        new DefinitelyNotDispatched("op-123");
+
     // When - execute (delegate throws after intent succeeds)
     assertThatThrownBy(
             () ->
                 reconstructor.executeApprovedBatch(
-                    List.of(pendingOp), List.of(), List.of(), new ArrayList<>(), observationContext, List.of()))
+                    List.of(pendingOp), List.of(), List.of(), new ArrayList<>(), observationContext, List.of(classification)))
         .isInstanceOf(RuntimeException.class)
         .hasMessageContaining("Tool execution failed");
 
     // Then - intent WAS recorded (before delegate threw)
-    assertThat(store.hasInvocationIntent("proc-test", "op-123", "attempt-test"))
+    List<InvocationAttempt> attempts = store.findAttempts("proc-test", "op-123");
+    assertThat(attempts)
         .as("Intent should be recorded even when delegate fails")
-        .isTrue();
+        .isNotEmpty();
 
     // Then - TOOL_FAILED event emitted (not gate failure)
     assertThat(events)
@@ -300,14 +314,19 @@ class InvocationIntentGateTest {
     PendingToolCall pendingOp =
         new PendingToolCall("op-123", "tc-123", "test-tool", "{}");
 
+    // Given - classification: no prior attempts (DEFINITELY_NOT_DISPATCHED)
+    RecoveryClassificationResult classification =
+        new DefinitelyNotDispatched("op-123");
+
     // When
     reconstructor.executeApprovedBatch(
-        List.of(pendingOp), List.of(), List.of(), new ArrayList<>(), observationContext, List.of());
+        List.of(pendingOp), List.of(), List.of(), new ArrayList<>(), observationContext, List.of(classification));
 
     // Then - intent recorded
-    assertThat(store.hasInvocationIntent("proc-test", "op-123", "attempt-test"))
+    List<InvocationAttempt> attempts = store.findAttempts("proc-test", "op-123");
+    assertThat(attempts)
         .as("Intent should be recorded")
-        .isTrue();
+        .isNotEmpty();
 
     // Then - TOOL_EXECUTED event emitted
     assertThat(events)

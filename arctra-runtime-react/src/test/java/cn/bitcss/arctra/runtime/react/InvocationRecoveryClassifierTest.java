@@ -76,12 +76,13 @@ class InvocationRecoveryClassifierTest {
 
           @Override
           public boolean hasInvocationIntent(String processId, String operationId, String attemptId) {
-            throw new RuntimeException("Test storage read failure");
+            // Not used in M6-T5 (uses findAttempts instead)
+            return false;
           }
 
           @Override
           public java.util.List<InvocationAttempt> findAttempts(String processId, String operationId) {
-            return java.util.List.of();
+            throw new RuntimeException("Test storage read failure");
           }
 
           @Override
