@@ -31,10 +31,10 @@ class InMemoryInvocationStateStoreTest {
     String operationId = "op-456";
 
     // When
-    store.recordInvocationIntent(processId, operationId);
+    store.recordInvocationIntent(processId, operationId, "attempt-test");
 
     // Then
-    assertThat(store.hasInvocationIntent(processId, operationId))
+    assertThat(store.hasInvocationIntent(processId, operationId, "attempt-test"))
         .as("Intent should be recorded")
         .isTrue();
   }
@@ -46,15 +46,15 @@ class InMemoryInvocationStateStoreTest {
     // Given
     String processId = "proc-123";
     String operationId = "op-456";
-    store.recordInvocationIntent(processId, operationId);
+    store.recordInvocationIntent(processId, operationId, "attempt-test");
 
     // When - record same intent again
-    assertThatCode(() -> store.recordInvocationIntent(processId, operationId))
+    assertThatCode(() -> store.recordInvocationIntent(processId, operationId, "attempt-test"))
         .as("Duplicate recording should succeed without error")
         .doesNotThrowAnyException();
 
     // Then - intent still exists (idempotent state write)
-    assertThat(store.hasInvocationIntent(processId, operationId))
+    assertThat(store.hasInvocationIntent(processId, operationId, "attempt-test"))
         .as("Intent should still be recorded after duplicate")
         .isTrue();
   }
@@ -66,11 +66,11 @@ class InMemoryInvocationStateStoreTest {
     String operationId = "op-456";
 
     // When - both workers record intent
-    store.recordInvocationIntent(processId, operationId); // Worker A
-    store.recordInvocationIntent(processId, operationId); // Worker B
+    store.recordInvocationIntent(processId, operationId, "attempt-test"); // Worker A
+    store.recordInvocationIntent(processId, operationId, "attempt-test"); // Worker B
 
     // Then - both succeed (no claiming, at-least-once preserved)
-    assertThat(store.hasInvocationIntent(processId, operationId))
+    assertThat(store.hasInvocationIntent(processId, operationId, "attempt-test"))
         .as("Intent recorded by both workers")
         .isTrue();
     // Note: This test proves idempotent write, not claiming.
@@ -87,14 +87,14 @@ class InMemoryInvocationStateStoreTest {
     String opB = "op-B";
 
     // When
-    store.recordInvocationIntent(processId, opA);
-    store.recordInvocationIntent(processId, opB);
+    store.recordInvocationIntent(processId, opA, "attempt-test");
+    store.recordInvocationIntent(processId, opB, "attempt-test");
 
     // Then
-    assertThat(store.hasInvocationIntent(processId, opA))
+    assertThat(store.hasInvocationIntent(processId, opA, "attempt-test"))
         .as("Intent for op-A should be recorded")
         .isTrue();
-    assertThat(store.hasInvocationIntent(processId, opB))
+    assertThat(store.hasInvocationIntent(processId, opB, "attempt-test"))
         .as("Intent for op-B should be recorded")
         .isTrue();
   }
@@ -109,14 +109,14 @@ class InMemoryInvocationStateStoreTest {
     String operationId = "op-A";
 
     // When
-    store.recordInvocationIntent(proc1, operationId);
-    store.recordInvocationIntent(proc2, operationId);
+    store.recordInvocationIntent(proc1, operationId, "attempt-test");
+    store.recordInvocationIntent(proc2, operationId, "attempt-test");
 
     // Then
-    assertThat(store.hasInvocationIntent(proc1, operationId))
+    assertThat(store.hasInvocationIntent(proc1, operationId, "attempt-test"))
         .as("Intent for proc-1 should be recorded")
         .isTrue();
-    assertThat(store.hasInvocationIntent(proc2, operationId))
+    assertThat(store.hasInvocationIntent(proc2, operationId, "attempt-test"))
         .as("Intent for proc-2 should be recorded")
         .isTrue();
   }
@@ -139,7 +139,7 @@ class InMemoryInvocationStateStoreTest {
               () -> {
                 for (int i = 0; i < operationsPerThread; i++) {
                   String operationId = "op-" + threadIndex + "-" + i;
-                  store.recordInvocationIntent(processId, operationId);
+                  store.recordInvocationIntent(processId, operationId, "attempt-test");
                 }
               });
       threads[t].start();
@@ -154,7 +154,7 @@ class InMemoryInvocationStateStoreTest {
     for (int t = 0; t < threadCount; t++) {
       for (int i = 0; i < operationsPerThread; i++) {
         String operationId = "op-" + t + "-" + i;
-        assertThat(store.hasInvocationIntent(processId, operationId))
+        assertThat(store.hasInvocationIntent(processId, operationId, "attempt-test"))
             .as("Intent for " + operationId + " should be recorded")
             .isTrue();
       }
@@ -165,28 +165,28 @@ class InMemoryInvocationStateStoreTest {
 
   @Test
   void recordInvocationIntent_nullProcessId_shouldThrow() {
-    assertThatThrownBy(() -> store.recordInvocationIntent(null, "op-123"))
+    assertThatThrownBy(() -> store.recordInvocationIntent(null, "op-123", "attempt-test"))
         .isInstanceOf(NullPointerException.class)
         .hasMessageContaining("processId cannot be null");
   }
 
   @Test
   void recordInvocationIntent_nullOperationId_shouldThrow() {
-    assertThatThrownBy(() -> store.recordInvocationIntent("proc-123", null))
+    assertThatThrownBy(() -> store.recordInvocationIntent("proc-123", null, "attempt-test"))
         .isInstanceOf(NullPointerException.class)
         .hasMessageContaining("operationId cannot be null");
   }
 
   @Test
   void recordInvocationIntent_blankProcessId_shouldThrow() {
-    assertThatThrownBy(() -> store.recordInvocationIntent("   ", "op-123"))
+    assertThatThrownBy(() -> store.recordInvocationIntent("   ", "op-123", "attempt-test"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("processId cannot be blank");
   }
 
   @Test
   void recordInvocationIntent_blankOperationId_shouldThrow() {
-    assertThatThrownBy(() -> store.recordInvocationIntent("proc-123", "   "))
+    assertThatThrownBy(() -> store.recordInvocationIntent("proc-123", "   ", "attempt-test"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("operationId cannot be blank");
   }
@@ -198,7 +198,7 @@ class InMemoryInvocationStateStoreTest {
     String operationId = "op-456";
 
     // When/Then
-    assertThat(store.hasInvocationIntent(processId, operationId))
+    assertThat(store.hasInvocationIntent(processId, operationId, "attempt-test"))
         .as("Intent should not exist for unrecorded operation")
         .isFalse();
   }
@@ -206,10 +206,10 @@ class InMemoryInvocationStateStoreTest {
   @Test
   void hasInvocationIntent_differentProcess_shouldReturnFalse() {
     // Given
-    store.recordInvocationIntent("proc-A", "op-123");
+    store.recordInvocationIntent("proc-A", "op-123", "attempt-test");
 
     // When/Then
-    assertThat(store.hasInvocationIntent("proc-B", "op-123"))
+    assertThat(store.hasInvocationIntent("proc-B", "op-123", "attempt-test"))
         .as("Intent for different process should not exist")
         .isFalse();
   }
@@ -217,10 +217,10 @@ class InMemoryInvocationStateStoreTest {
   @Test
   void hasInvocationIntent_differentOperation_shouldReturnFalse() {
     // Given
-    store.recordInvocationIntent("proc-123", "op-A");
+    store.recordInvocationIntent("proc-123", "op-A", "attempt-test");
 
     // When/Then
-    assertThat(store.hasInvocationIntent("proc-123", "op-B"))
+    assertThat(store.hasInvocationIntent("proc-123", "op-B", "attempt-test"))
         .as("Intent for different operation should not exist")
         .isFalse();
   }
@@ -228,16 +228,16 @@ class InMemoryInvocationStateStoreTest {
   @Test
   void clear_shouldRemoveAllIntents() {
     // Given
-    store.recordInvocationIntent("proc-1", "op-A");
-    store.recordInvocationIntent("proc-1", "op-B");
-    store.recordInvocationIntent("proc-2", "op-C");
+    store.recordInvocationIntent("proc-1", "op-A", "attempt-test");
+    store.recordInvocationIntent("proc-1", "op-B", "attempt-test");
+    store.recordInvocationIntent("proc-2", "op-C", "attempt-test");
 
     // When
     store.clear();
 
     // Then
-    assertThat(store.hasInvocationIntent("proc-1", "op-A")).isFalse();
-    assertThat(store.hasInvocationIntent("proc-1", "op-B")).isFalse();
-    assertThat(store.hasInvocationIntent("proc-2", "op-C")).isFalse();
+    assertThat(store.hasInvocationIntent("proc-1", "op-A", "attempt-test")).isFalse();
+    assertThat(store.hasInvocationIntent("proc-1", "op-B", "attempt-test")).isFalse();
+    assertThat(store.hasInvocationIntent("proc-2", "op-C", "attempt-test")).isFalse();
   }
 }

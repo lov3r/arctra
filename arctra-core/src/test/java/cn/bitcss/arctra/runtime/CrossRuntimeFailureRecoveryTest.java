@@ -175,5 +175,10 @@ class CrossRuntimeFailureRecoveryTest {
 
     protected abstract AgentResult executeResolved(
         RuntimeBinding binding, ContinuationSignal signal);
+
+    @Override
+    public RecoveryResolution recovery() {
+      throw new UnsupportedOperationException("Not used in tests");
+    }
   }
 }

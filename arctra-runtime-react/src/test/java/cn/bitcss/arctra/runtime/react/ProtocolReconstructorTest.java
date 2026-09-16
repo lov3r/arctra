@@ -52,7 +52,7 @@ class ProtocolReconstructorTest {
 
     List<Message> continuationMessages =
         reconstructor.executeApprovedBatch(
-            pendingBatch, conversationHistory, checkpointEvidences, newEvidences, observationContext);
+            pendingBatch, conversationHistory, checkpointEvidences, newEvidences, observationContext, List.of());
 
     // THEN: Tool executed with NEW instance
     assertThat(executionCount.get()).isEqualTo(1);
@@ -94,7 +94,8 @@ class ProtocolReconstructorTest {
             List.of(new UserMessage("test")),
             List.of(),
             Collections.synchronizedList(new ArrayList<>()),
-            observationContext);
+            observationContext,
+            List.of());
 
     assertThat(executionCount.get()).isEqualTo(1);
 
@@ -127,7 +128,7 @@ class ProtocolReconstructorTest {
         new ToolObservationContext("test-proc", 1L, "test-base-op", event -> {});
 
     reconstructor.executeApprovedBatch(
-        List.of(dto1, dto2), List.of(new UserMessage("test")), List.of(), newEvidences, observationContext);
+        List.of(dto1, dto2), List.of(new UserMessage("test")), List.of(), newEvidences, observationContext, List.of());
 
     assertThat(countA.get()).isEqualTo(1);
     assertThat(countB.get()).isEqualTo(1);

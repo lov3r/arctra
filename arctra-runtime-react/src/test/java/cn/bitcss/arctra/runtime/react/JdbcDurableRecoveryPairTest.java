@@ -64,7 +64,7 @@ class JdbcDurableRecoveryPairTest {
             List.of(), "test-epoch");
 
     checkpointStoreA.create(checkpoint);
-    intentStoreA.recordInvocationIntent("proc-restart-pair", "op-durable");
+    intentStoreA.recordInvocationIntent("proc-restart-pair", "op-durable", "attempt-test");
 
     // Discard instances A (simulate JVM restart)
     checkpointStoreA = null;
@@ -75,7 +75,7 @@ class JdbcDurableRecoveryPairTest {
     JdbcInvocationStateStore intentStoreB = new JdbcInvocationStateStore(database);
 
     assertThat(checkpointStoreB.load("proc-restart-pair")).isPresent();
-    assertThat(intentStoreB.hasInvocationIntent("proc-restart-pair", "op-durable")).isTrue();
+    assertThat(intentStoreB.hasInvocationIntent("proc-restart-pair", "op-durable", "attempt-test")).isTrue();
   }
 
   @Test
@@ -97,7 +97,7 @@ class JdbcDurableRecoveryPairTest {
             List.of(), "test-epoch");
 
     checkpointStore.create(checkpoint);
-    intentStore.recordInvocationIntent("proc-same-ds", "op-1");
+    intentStore.recordInvocationIntent("proc-same-ds", "op-1", "attempt-test");
 
     // Direct DB query confirms both in same database
     JdbcTemplate jdbc = new JdbcTemplate(database);
@@ -139,14 +139,14 @@ class JdbcDurableRecoveryPairTest {
     checkpointStore.create(checkpoint);
 
     // Write intent
-    intentStore.recordInvocationIntent("proc-raw", "op-raw");
+    intentStore.recordInvocationIntent("proc-raw", "op-raw", "attempt-test");
 
     // Independent store instances immediately see committed data
     JdbcCheckpointStore checkpointStore2 = new JdbcCheckpointStore(database);
     JdbcInvocationStateStore intentStore2 = new JdbcInvocationStateStore(database);
 
     assertThat(checkpointStore2.load("proc-raw")).isPresent();
-    assertThat(intentStore2.hasInvocationIntent("proc-raw", "op-raw")).isTrue();
+    assertThat(intentStore2.hasInvocationIntent("proc-raw", "op-raw", "attempt-test")).isTrue();
   }
 
   @Test
@@ -166,14 +166,14 @@ class JdbcDurableRecoveryPairTest {
             List.of(), "test-epoch");
 
     checkpointStore.create(checkpoint);
-    intentStore.recordInvocationIntent("proc-orphan", "op-orphan");
+    intentStore.recordInvocationIntent("proc-orphan", "op-orphan", "attempt-test");
 
     // Delete checkpoint (terminal state reached)
     checkpointStore.deleteIfVersion("proc-orphan", 1L);
 
     // Intent remains (orphan intent is safe - cannot contaminate new operations)
     assertThat(checkpointStore.load("proc-orphan")).isEmpty();
-    assertThat(intentStore.hasInvocationIntent("proc-orphan", "op-orphan")).isTrue();
+    assertThat(intentStore.hasInvocationIntent("proc-orphan", "op-orphan", "attempt-test")).isTrue();
   }
 
   @Test
@@ -198,13 +198,13 @@ class JdbcDurableRecoveryPairTest {
     checkpointStore.create(checkpoint);
 
     // Intents recorded for op-1 and op-2 (op-3 not yet executed)
-    intentStore.recordInvocationIntent("proc-multi", "op-1");
-    intentStore.recordInvocationIntent("proc-multi", "op-2");
+    intentStore.recordInvocationIntent("proc-multi", "op-1", "attempt-test");
+    intentStore.recordInvocationIntent("proc-multi", "op-2", "attempt-test");
 
     // Verify state
-    assertThat(intentStore.hasInvocationIntent("proc-multi", "op-1")).isTrue();
-    assertThat(intentStore.hasInvocationIntent("proc-multi", "op-2")).isTrue();
-    assertThat(intentStore.hasInvocationIntent("proc-multi", "op-3")).isFalse();
+    assertThat(intentStore.hasInvocationIntent("proc-multi", "op-1", "attempt-test")).isTrue();
+    assertThat(intentStore.hasInvocationIntent("proc-multi", "op-2", "attempt-test")).isTrue();
+    assertThat(intentStore.hasInvocationIntent("proc-multi", "op-3", "attempt-test")).isFalse();
   }
 
   @Test
@@ -224,17 +224,17 @@ class JdbcDurableRecoveryPairTest {
             List.of(), "test-epoch");
 
     inMemoryCheckpoint.create(checkpoint);
-    jdbcIntent.recordInvocationIntent("proc-mixed", "op-mixed");
+    jdbcIntent.recordInvocationIntent("proc-mixed", "op-mixed", "attempt-test");
 
     // Execution-compatible: both stores work
     assertThat(inMemoryCheckpoint.load("proc-mixed")).isPresent();
-    assertThat(jdbcIntent.hasInvocationIntent("proc-mixed", "op-mixed")).isTrue();
+    assertThat(jdbcIntent.hasInvocationIntent("proc-mixed", "op-mixed", "attempt-test")).isTrue();
 
     // But after "restart" (discard in-memory store):
     inMemoryCheckpoint = new InMemoryCheckpointStore();
 
     // Checkpoint lost, intent remains (useless but safe)
     assertThat(inMemoryCheckpoint.load("proc-mixed")).isEmpty();
-    assertThat(jdbcIntent.hasInvocationIntent("proc-mixed", "op-mixed")).isTrue();
+    assertThat(jdbcIntent.hasInvocationIntent("proc-mixed", "op-mixed", "attempt-test")).isTrue();
   }
 }

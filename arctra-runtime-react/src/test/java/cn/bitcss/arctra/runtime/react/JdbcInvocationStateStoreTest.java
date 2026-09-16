@@ -50,9 +50,9 @@ class JdbcInvocationStateStoreTest {
   @Test
   @DisplayName("Record and check intent")
   void recordAndCheck() {
-    store.recordInvocationIntent("proc-1", "op-A");
+    store.recordInvocationIntent("proc-1", "op-A", "attempt-test");
 
-    boolean hasIntent = store.hasInvocationIntent("proc-1", "op-A");
+    boolean hasIntent = store.hasInvocationIntent("\1", "\2", "attempt-test");
 
     assertThat(hasIntent).isTrue();
   }
@@ -60,7 +60,7 @@ class JdbcInvocationStateStoreTest {
   @Test
   @DisplayName("Intent absent returns false")
   void intentAbsent() {
-    boolean hasIntent = store.hasInvocationIntent("proc-unknown", "op-unknown");
+    boolean hasIntent = store.hasInvocationIntent("\1", "\2", "attempt-test");
 
     assertThat(hasIntent).isFalse();
   }
@@ -68,19 +68,19 @@ class JdbcInvocationStateStoreTest {
   @Test
   @DisplayName("Process isolation: different processes have separate intents")
   void processIsolation() {
-    store.recordInvocationIntent("proc-A", "op-X");
+    store.recordInvocationIntent("proc-A", "op-X", "attempt-test");
 
-    assertThat(store.hasInvocationIntent("proc-A", "op-X")).isTrue();
-    assertThat(store.hasInvocationIntent("proc-B", "op-X")).isFalse();
+    assertThat(store.hasInvocationIntent("\1", "\2", "attempt-test")).isTrue();
+    assertThat(store.hasInvocationIntent("\1", "\2", "attempt-test")).isFalse();
   }
 
   @Test
   @DisplayName("Operation isolation: different operations within same process")
   void operationIsolation() {
-    store.recordInvocationIntent("proc-1", "op-X");
+    store.recordInvocationIntent("proc-1", "op-X", "attempt-test");
 
-    assertThat(store.hasInvocationIntent("proc-1", "op-X")).isTrue();
-    assertThat(store.hasInvocationIntent("proc-1", "op-Y")).isFalse();
+    assertThat(store.hasInvocationIntent("\1", "\2", "attempt-test")).isTrue();
+    assertThat(store.hasInvocationIntent("\1", "\2", "attempt-test")).isFalse();
   }
 
   @Test
@@ -88,14 +88,14 @@ class JdbcInvocationStateStoreTest {
   void duplicateIntentIdempotent() {
     // First write
     assertThatNoException()
-        .isThrownBy(() -> store.recordInvocationIntent("proc-dup", "op-dup"));
+        .isThrownBy(() -> store.recordInvocationIntent("proc-dup", "op-dup", "attempt-test"));
 
     // Duplicate write - must succeed (idempotent)
     assertThatNoException()
-        .isThrownBy(() -> store.recordInvocationIntent("proc-dup", "op-dup"));
+        .isThrownBy(() -> store.recordInvocationIntent("proc-dup", "op-dup", "attempt-test"));
 
     // Intent exists
-    assertThat(store.hasInvocationIntent("proc-dup", "op-dup")).isTrue();
+    assertThat(store.hasInvocationIntent("\1", "\2", "attempt-test")).isTrue();
   }
 
   @Test
@@ -117,7 +117,7 @@ class JdbcInvocationStateStoreTest {
         () -> {
           try {
             startLatch.await();
-            storeA.recordInvocationIntent("proc-concurrent", "op-concurrent");
+            storeA.recordInvocationIntent("proc-concurrent", "op-concurrent", "attempt-test");
             successCount.incrementAndGet();
           } catch (Exception e) {
             exceptionCount.incrementAndGet();
@@ -131,7 +131,7 @@ class JdbcInvocationStateStoreTest {
         () -> {
           try {
             startLatch.await();
-            storeB.recordInvocationIntent("proc-concurrent", "op-concurrent");
+            storeB.recordInvocationIntent("proc-concurrent", "op-concurrent", "attempt-test");
             successCount.incrementAndGet();
           } catch (Exception e) {
             exceptionCount.incrementAndGet();
@@ -151,7 +151,7 @@ class JdbcInvocationStateStoreTest {
     assertThat(exceptionCount.get()).isEqualTo(0);
 
     // Intent exists
-    assertThat(store.hasInvocationIntent("proc-concurrent", "op-concurrent")).isTrue();
+    assertThat(store.hasInvocationIntent("\1", "\2", "attempt-test")).isTrue();
   }
 
   @Test
@@ -159,7 +159,7 @@ class JdbcInvocationStateStoreTest {
   void restartSimulation() {
     JdbcInvocationStateStore storeA = new JdbcInvocationStateStore(database);
 
-    storeA.recordInvocationIntent("proc-restart", "op-restart");
+    storeA.recordInvocationIntent("proc-restart", "op-restart", "attempt-test");
 
     // Discard store A (simulate JVM restart)
     storeA = null;
@@ -167,7 +167,7 @@ class JdbcInvocationStateStoreTest {
     // Create new store instance B
     JdbcInvocationStateStore storeB = new JdbcInvocationStateStore(database);
 
-    boolean hasIntent = storeB.hasInvocationIntent("proc-restart", "op-restart");
+    boolean hasIntent = storeB.hasInvocationIntent("\1", "\2", "attempt-test");
 
     assertThat(hasIntent).isTrue();
   }
@@ -178,10 +178,10 @@ class JdbcInvocationStateStoreTest {
     JdbcInvocationStateStore storeA = new JdbcInvocationStateStore(database);
     JdbcInvocationStateStore storeB = new JdbcInvocationStateStore(database);
 
-    storeA.recordInvocationIntent("proc-cross", "op-cross");
+    storeA.recordInvocationIntent("proc-cross", "op-cross", "attempt-test");
 
     // Store B reads immediately (strong read-after-write)
-    boolean hasIntent = storeB.hasInvocationIntent("proc-cross", "op-cross");
+    boolean hasIntent = storeB.hasInvocationIntent("\1", "\2", "attempt-test");
 
     assertThat(hasIntent).isTrue();
   }
@@ -189,7 +189,7 @@ class JdbcInvocationStateStoreTest {
   @Test
   @DisplayName("Null processId throws NullPointerException on record")
   void nullProcessIdOnRecord() {
-    assertThatThrownBy(() -> store.recordInvocationIntent(null, "op-1"))
+    assertThatThrownBy(() -> store.recordInvocationIntent(null, "op-1", "attempt-test"))
         .isInstanceOf(NullPointerException.class)
         .hasMessageContaining("processId");
   }
@@ -197,7 +197,7 @@ class JdbcInvocationStateStoreTest {
   @Test
   @DisplayName("Blank processId throws IllegalArgumentException on record")
   void blankProcessIdOnRecord() {
-    assertThatThrownBy(() -> store.recordInvocationIntent("  ", "op-1"))
+    assertThatThrownBy(() -> store.recordInvocationIntent("  ", "op-1", "attempt-test"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("processId");
   }
@@ -205,7 +205,7 @@ class JdbcInvocationStateStoreTest {
   @Test
   @DisplayName("Null operationId throws NullPointerException on record")
   void nullOperationIdOnRecord() {
-    assertThatThrownBy(() -> store.recordInvocationIntent("proc-1", null))
+    assertThatThrownBy(() -> store.recordInvocationIntent("proc-1", null, "attempt-test"))
         .isInstanceOf(NullPointerException.class)
         .hasMessageContaining("operationId");
   }
@@ -213,7 +213,7 @@ class JdbcInvocationStateStoreTest {
   @Test
   @DisplayName("Blank operationId throws IllegalArgumentException on record")
   void blankOperationIdOnRecord() {
-    assertThatThrownBy(() -> store.recordInvocationIntent("proc-1", "  "))
+    assertThatThrownBy(() -> store.recordInvocationIntent("proc-1", "  ", "attempt-test"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("operationId");
   }
@@ -221,7 +221,7 @@ class JdbcInvocationStateStoreTest {
   @Test
   @DisplayName("Null processId throws NullPointerException on check")
   void nullProcessIdOnCheck() {
-    assertThatThrownBy(() -> store.hasInvocationIntent(null, "op-1"))
+    assertThatThrownBy(() -> store.hasInvocationIntent(null, "op-1", "attempt-test"))
         .isInstanceOf(NullPointerException.class)
         .hasMessageContaining("processId");
   }
@@ -229,7 +229,7 @@ class JdbcInvocationStateStoreTest {
   @Test
   @DisplayName("Blank processId throws IllegalArgumentException on check")
   void blankProcessIdOnCheck() {
-    assertThatThrownBy(() -> store.hasInvocationIntent("  ", "op-1"))
+    assertThatThrownBy(() -> store.hasInvocationIntent("\1", "\2", "attempt-test"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("processId");
   }
@@ -237,7 +237,7 @@ class JdbcInvocationStateStoreTest {
   @Test
   @DisplayName("Null operationId throws NullPointerException on check")
   void nullOperationIdOnCheck() {
-    assertThatThrownBy(() -> store.hasInvocationIntent("proc-1", null))
+    assertThatThrownBy(() -> store.hasInvocationIntent("proc-1", null, "attempt-test"))
         .isInstanceOf(NullPointerException.class)
         .hasMessageContaining("operationId");
   }
@@ -245,7 +245,7 @@ class JdbcInvocationStateStoreTest {
   @Test
   @DisplayName("Blank operationId throws IllegalArgumentException on check")
   void blankOperationIdOnCheck() {
-    assertThatThrownBy(() -> store.hasInvocationIntent("proc-1", "  "))
+    assertThatThrownBy(() -> store.hasInvocationIntent("\1", "\2", "attempt-test"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("operationId");
   }
@@ -253,13 +253,13 @@ class JdbcInvocationStateStoreTest {
   @Test
   @DisplayName("Multiple intents for same process")
   void multipleIntentsSameProcess() {
-    store.recordInvocationIntent("proc-multi", "op-1");
-    store.recordInvocationIntent("proc-multi", "op-2");
-    store.recordInvocationIntent("proc-multi", "op-3");
+    store.recordInvocationIntent("proc-multi", "op-1", "attempt-test");
+    store.recordInvocationIntent("proc-multi", "op-2", "attempt-test");
+    store.recordInvocationIntent("proc-multi", "op-3", "attempt-test");
 
-    assertThat(store.hasInvocationIntent("proc-multi", "op-1")).isTrue();
-    assertThat(store.hasInvocationIntent("proc-multi", "op-2")).isTrue();
-    assertThat(store.hasInvocationIntent("proc-multi", "op-3")).isTrue();
-    assertThat(store.hasInvocationIntent("proc-multi", "op-4")).isFalse();
+    assertThat(store.hasInvocationIntent("\1", "\2", "attempt-test")).isTrue();
+    assertThat(store.hasInvocationIntent("\1", "\2", "attempt-test")).isTrue();
+    assertThat(store.hasInvocationIntent("\1", "\2", "attempt-test")).isTrue();
+    assertThat(store.hasInvocationIntent("\1", "\2", "attempt-test")).isFalse();
   }
 }

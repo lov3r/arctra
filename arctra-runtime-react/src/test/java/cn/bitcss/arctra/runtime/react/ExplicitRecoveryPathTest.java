@@ -115,7 +115,7 @@ class ExplicitRecoveryPathTest {
   void explicitRecovery_uncertainBatch_shouldFailClosedBeforeAnyExecution() {
     // Given - store with intent for op-B only
     RecordingInvocationStateStore store = new RecordingInvocationStateStore();
-    store.recordInvocationIntent("proc-test", "op-B"); // op-B already invoked
+    store.recordInvocationIntent("proc-test", "op-B", "attempt-test"); // op-B already invoked
 
     // Given - checkpoint with two operations (op-A safe, op-B uncertain)
     PendingToolCall opA = new PendingToolCall("op-A", "tc-A", "tool-A", "{}");
@@ -184,7 +184,7 @@ class ExplicitRecoveryPathTest {
   void explicitRecovery_uncertainOperationFirst_shouldStillFailClosed() {
     // Given - store with intent for op-A (first operation)
     RecordingInvocationStateStore store = new RecordingInvocationStateStore();
-    store.recordInvocationIntent("proc-test", "op-A"); // First op uncertain
+    store.recordInvocationIntent("proc-test", "op-A", "attempt-test"); // First op uncertain
 
     PendingToolCall opA = new PendingToolCall("op-A", "tc-A", "tool-A", "{}");
     PendingToolCall opB = new PendingToolCall("op-B", "tc-B", "tool-B", "{}");
@@ -248,13 +248,34 @@ class ExplicitRecoveryPathTest {
     InvocationStateStore failingStore =
         new InvocationStateStore() {
           @Override
-          public void recordInvocationIntent(String processId, String operationId) {
+          public void recordInvocationIntent(String processId, String operationId, String attemptId) {
             // Writes work
           }
 
           @Override
-          public boolean hasInvocationIntent(String processId, String operationId) {
+          public boolean hasInvocationIntent(String processId, String operationId, String attemptId) {
             throw new RuntimeException("Test storage read failure");
+          }
+
+          @Override
+          public java.util.List<InvocationAttempt> findAttempts(String processId, String operationId) {
+            return java.util.List.of();
+          }
+
+          @Override
+          public void recordResolution(
+              String processId,
+              String operationId,
+              String attemptId,
+              cn.bitcss.arctra.recovery.ResolutionType type,
+              String recoveredResult) {
+            // No-op
+          }
+
+          @Override
+          public java.util.Optional<cn.bitcss.arctra.recovery.OperationResolution> getResolution(
+              String processId, String operationId, String attemptId) {
+            return java.util.Optional.empty();
           }
         };
 
@@ -324,7 +345,7 @@ class ExplicitRecoveryPathTest {
   void explicitRecovery_reject_shouldBypassClassificationAndSynthesizeRejection() {
     // Given - store with existing intent
     RecordingInvocationStateStore store = new RecordingInvocationStateStore();
-    store.recordInvocationIntent("proc-test", "op-A"); // Intent exists
+    store.recordInvocationIntent("proc-test", "op-A", "attempt-test"); // Intent exists
     store.clearReadCalls(); // Clear any reads from setup
 
     PendingToolCall opA = new PendingToolCall("op-A", "tc-A", "tool-A", "{}");
@@ -391,15 +412,37 @@ class ExplicitRecoveryPathTest {
     final List<String> writeCalls = new ArrayList<>();
 
     @Override
-    public void recordInvocationIntent(String processId, String operationId) {
+    public void recordInvocationIntent(String processId, String operationId, String attemptId) {
       writeCalls.add(processId + ":" + operationId);
-      delegate.recordInvocationIntent(processId, operationId);
+      delegate.recordInvocationIntent(processId, operationId, attemptId);
     }
 
     @Override
-    public boolean hasInvocationIntent(String processId, String operationId) {
+    public boolean hasInvocationIntent(String processId, String operationId, String attemptId) {
       readCalls.add(processId + ":" + operationId);
-      return delegate.hasInvocationIntent(processId, operationId);
+      return delegate.hasInvocationIntent(processId, operationId, attemptId);
+    }
+
+    @Override
+    public java.util.List<cn.bitcss.arctra.runtime.react.InvocationAttempt> findAttempts(
+        String processId, String operationId) {
+      return delegate.findAttempts(processId, operationId);
+    }
+
+    @Override
+    public void recordResolution(
+        String processId,
+        String operationId,
+        String attemptId,
+        cn.bitcss.arctra.recovery.ResolutionType type,
+        String recoveredResult) {
+      delegate.recordResolution(processId, operationId, attemptId, type, recoveredResult);
+    }
+
+    @Override
+    public java.util.Optional<cn.bitcss.arctra.recovery.OperationResolution> getResolution(
+        String processId, String operationId, String attemptId) {
+      return delegate.getResolution(processId, operationId, attemptId);
     }
 
     void clearReadCalls() {
@@ -464,13 +507,14 @@ class ExplicitRecoveryPathTest {
           RuntimeBinding binding,
           List<Evidence> historicalEvidences,
           ContinuationSignal signal,
-          ToolObservationContext baseObservationContext) {
+          ToolObservationContext baseObservationContext,
+          List<RecoveryClassificationResult> classifications) {
 
         if (signal instanceof ContinuationSignal.ApprovalSignal approval && approval.approved()) {
           // Simulate physical execution for APPROVE
           for (PendingToolCall op : pendingBatch) {
             // Record intent (write gate)
-            store.recordInvocationIntent(baseObservationContext.processId(), op.operationId());
+            store.recordInvocationIntent(baseObservationContext.processId(), op.operationId(), "attempt-test");
             // Physical invocation
             counter.incrementAndGet();
           }
@@ -502,6 +546,11 @@ class ExplicitRecoveryPathTest {
       @Override
       public AgentResult resumeProcess(
           String processId, long checkpointVersion, ContinuationSignal signal) {
+        throw new UnsupportedOperationException("Test engine should not be called");
+      }
+
+      @Override
+      public cn.bitcss.arctra.runtime.RecoveryResolution recovery() {
         throw new UnsupportedOperationException("Test engine should not be called");
       }
     };

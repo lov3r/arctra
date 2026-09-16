@@ -777,6 +777,30 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
     return durableResumeCoordinator.resume(
         processId, checkpointVersion, signal, ExecutionIncarnation.current());
   }
+
+  /**
+   * Access recovery resolution capability (M6-T5).
+   *
+   * @return recovery resolution API
+   * @throws IllegalStateException if durable mode not configured
+   * @since M6-T5
+   */
+  @Override
+  public cn.bitcss.arctra.runtime.RecoveryResolution recovery() {
+    if (durableResumeCoordinator == null) {
+      throw new IllegalStateException(
+          "recovery() requires complete durable configuration. "
+              + "Current: checkpointStore="
+              + (checkpointStore != null ? "present" : "null")
+              + ", bindingResolver="
+              + (bindingResolver != null ? "present" : "null")
+              + ", runtimeBindingKey="
+              + (runtimeBindingKey != null ? "present" : "null"));
+    }
+
+    return durableResumeCoordinator.recovery();
+  }
+
   /**
    * Emit an execution event through the event sink.
    *

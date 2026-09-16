@@ -247,14 +247,36 @@ class AutomaticRecoveryModeSelectionTest {
     final List<String> writeCalls = new ArrayList<>();
 
     @Override
-    public void recordInvocationIntent(String processId, String operationId) {
+    public void recordInvocationIntent(String processId, String operationId, String attemptId) {
       writeCalls.add(processId + ":" + operationId);
     }
 
     @Override
-    public boolean hasInvocationIntent(String processId, String operationId) {
+    public boolean hasInvocationIntent(String processId, String operationId, String attemptId) {
       readCalls.add(processId + ":" + operationId);
       return false; // Default: no intent exists
+    }
+
+    @Override
+    public java.util.List<cn.bitcss.arctra.runtime.react.InvocationAttempt> findAttempts(
+        String processId, String operationId) {
+      return java.util.List.of();
+    }
+
+    @Override
+    public void recordResolution(
+        String processId,
+        String operationId,
+        String attemptId,
+        cn.bitcss.arctra.recovery.ResolutionType type,
+        String recoveredResult) {
+      // No-op for test
+    }
+
+    @Override
+    public java.util.Optional<cn.bitcss.arctra.recovery.OperationResolution> getResolution(
+        String processId, String operationId, String attemptId) {
+      return java.util.Optional.empty();
     }
   }
 

@@ -79,4 +79,14 @@ public class DefaultAgentRuntime implements AgentRuntime {
 
     return durable.resumeProcess(processId, checkpointVersion, signal);
   }
+
+  @Override
+  public RecoveryResolution recovery() {
+    if (!(engine instanceof DurableExecutionEngine durable)) {
+      throw new UnsupportedOperationException(
+          "Engine does not support durable recovery: " + engine.getClass().getName());
+    }
+
+    return durable.recovery();
+  }
 }

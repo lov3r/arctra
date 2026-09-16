@@ -1,38 +1,45 @@
 package cn.bitcss.arctra.runtime.react;
 
-import java.util.Objects;
-import java.util.Set;
+import cn.bitcss.arctra.recovery.InvalidRecoveryResolutionException;
+import cn.bitcss.arctra.recovery.OperationResolution;
+import cn.bitcss.arctra.recovery.RecoveryResolutionConflictException;
+import cn.bitcss.arctra.recovery.ResolutionType;
+import java.time.Instant;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
  * In-memory invocation-state store with thread-safe semantics.
  *
- * <p>Reference implementation for M6-T4A foundation. Validates recovery-critical invocation-intent
- * authority semantics within one JVM.
+ * <p>Reference implementation for M6-T4A/M6-T5 foundation. Validates recovery-critical
+ * invocation-intent authority semantics within one JVM.
  *
  * <p><strong>NOT restart durable:</strong> State is JVM-local only. This implementation does NOT
  * survive JVM restart. For production deployments requiring restart durability, use persistent
  * implementations (JDBC, Redis, etc.).
  *
+ * <h2>M6-T5: Physical Attempt Identity & Recovery Resolution</h2>
+ *
+ * <p>M6-T5 extends this store to support:
+ *
+ * <ul>
+ *   <li>Physical attempt identity (attemptId)
+ *   <li>Multiple attempts per logical operation
+ *   <li>Recovery resolution (NOT_EXECUTED, EXECUTED with result)
+ *   <li>Attempt enumeration
+ * </ul>
+ *
  * <h2>Storage Model</h2>
  *
  * <pre>
- * processId → Set&lt;operationId&gt;
+ * (processId, operationId, attemptId) → InvocationIntentRecord
+ * (processId, operationId, attemptId) → OperationResolution
  * </pre>
- *
- * <p>Uses {@link ConcurrentHashMap} with {@link ConcurrentHashMap#newKeySet()} for thread-safe
- * Set storage.
- *
- * <h2>Idempotency</h2>
- *
- * <p>Recording the same (processId, operationId) multiple times succeeds without error. This is
- * monotonic state write (intent exists), NOT claiming. Both workers may proceed to execute.
  *
  * <h2>Thread Safety</h2>
  *
- * <p>All methods are thread-safe. Concurrent recordings for the same operationId are safe and will
- * not corrupt state.
+ * <p>All methods are thread-safe. Uses {@link ConcurrentHashMap} for concurrent access.
  *
  * <h2>Limitations</h2>
  *
@@ -45,30 +52,30 @@ import java.util.concurrent.ConcurrentMap;
  *
  * <p>Package-private. Not part of public API.
  *
- * @author lov3r
  * @since M6-T4A
+ * @since M6-T5 Attempt identity, recovery resolution
  */
-class InMemoryInvocationStateStore implements InvocationStateStore {
+final class InMemoryInvocationStateStore implements InvocationStateStore {
 
-  // processId → Set<operationId>
-  private final ConcurrentMap<String, Set<String>> intents = new ConcurrentHashMap<>();
+  // Composite key for intent/resolution lookup
+  private record IntentKey(String processId, String operationId, String attemptId) {}
 
-  /**
-   * Record durable invocation intent.
-   *
-   * <p>In-memory implementation: always succeeds (no actual persistence failure possible). Adds
-   * operationId to the process's intent set. Idempotent: recording same intent multiple times
-   * succeeds.
-   *
-   * @param processId stable process identifier
-   * @param operationId logical durable tool operation identity
-   * @throws NullPointerException if processId or operationId is null
-   * @throws IllegalArgumentException if processId or operationId is blank
-   */
+  // Intent record with timestamp
+  private record InvocationIntentRecord(String attemptId, Instant recordedAt) {}
+
+  // Storage: (processId, operationId, attemptId) → intent record
+  private final ConcurrentMap<IntentKey, InvocationIntentRecord> intents =
+      new ConcurrentHashMap<>();
+
+  // Storage: (processId, operationId, attemptId) → resolution
+  private final ConcurrentMap<IntentKey, OperationResolution> resolutions =
+      new ConcurrentHashMap<>();
+
   @Override
-  public void recordInvocationIntent(String processId, String operationId) {
+  public void recordInvocationIntent(String processId, String operationId, String attemptId) {
     Objects.requireNonNull(processId, "processId cannot be null");
     Objects.requireNonNull(operationId, "operationId cannot be null");
+    Objects.requireNonNull(attemptId, "attemptId cannot be null");
 
     if (processId.isBlank()) {
       throw new IllegalArgumentException("processId cannot be blank");
@@ -76,37 +83,17 @@ class InMemoryInvocationStateStore implements InvocationStateStore {
     if (operationId.isBlank()) {
       throw new IllegalArgumentException("operationId cannot be blank");
     }
+    if (attemptId.isBlank()) {
+      throw new IllegalArgumentException("attemptId cannot be blank");
+    }
 
-    // Idempotent: computeIfAbsent ensures thread-safe Set creation
-    // add() is idempotent (returns false if already present, but no error)
-    intents.computeIfAbsent(processId, k -> ConcurrentHashMap.newKeySet()).add(operationId);
+    // Idempotent: putIfAbsent only stores if absent
+    IntentKey key = new IntentKey(processId, operationId, attemptId);
+    intents.putIfAbsent(key, new InvocationIntentRecord(attemptId, Instant.now()));
   }
 
-  /**
-   * Check if invocation intent exists for operation.
-   *
-   * <p><strong>M6-T4B: Recovery read authority implementation.</strong>
-   *
-   * <p>Returns true if intent was recorded, false if definitely absent. This is a JVM-local
-   * in-memory lookup and cannot normally fail (no storage/network errors possible).
-   *
-   * <p><strong>Semantics:</strong>
-   *
-   * <ul>
-   *   <li>Known process + known operation → true
-   *   <li>Known process + unknown operation → false
-   *   <li>Unknown process → false (no intents for unknown process)
-   * </ul>
-   *
-   * @param processId process identifier
-   * @param operationId operation identifier
-   * @return true if intent recorded, false if authoritatively absent
-   * @throws NullPointerException if processId or operationId is null
-   * @throws IllegalArgumentException if processId or operationId is blank
-   */
   @Override
-  public boolean hasInvocationIntent(String processId, String operationId) {
-    // Validate inputs (match recordInvocationIntent validation)
+  public boolean hasInvocationIntent(String processId, String operationId, String attemptId) {
     if (processId == null) {
       throw new NullPointerException("processId cannot be null");
     }
@@ -119,17 +106,143 @@ class InMemoryInvocationStateStore implements InvocationStateStore {
     if (operationId.isBlank()) {
       throw new IllegalArgumentException("operationId cannot be blank");
     }
+    if (attemptId == null) {
+      throw new NullPointerException("attemptId cannot be null");
+    }
+    if (attemptId.isBlank()) {
+      throw new IllegalArgumentException("attemptId cannot be blank");
+    }
 
-    Set<String> processIntents = intents.get(processId);
-    return processIntents != null && processIntents.contains(operationId);
+    IntentKey key = new IntentKey(processId, operationId, attemptId);
+    return intents.containsKey(key);
+  }
+
+  @Override
+  public List<InvocationAttempt> findAttempts(String processId, String operationId) {
+    Objects.requireNonNull(processId, "processId cannot be null");
+    Objects.requireNonNull(operationId, "operationId cannot be null");
+
+    if (processId.isBlank()) {
+      throw new IllegalArgumentException("processId cannot be blank");
+    }
+    if (operationId.isBlank()) {
+      throw new IllegalArgumentException("operationId cannot be blank");
+    }
+
+    // Filter intents for this process and operation
+    List<InvocationAttempt> attempts = new ArrayList<>();
+
+    for (Map.Entry<IntentKey, InvocationIntentRecord> entry : intents.entrySet()) {
+      IntentKey key = entry.getKey();
+      if (key.processId().equals(processId) && key.operationId().equals(operationId)) {
+        InvocationIntentRecord record = entry.getValue();
+
+        // Look up resolution for this attempt
+        Optional<OperationResolution> resolution = Optional.ofNullable(resolutions.get(key));
+
+        attempts.add(new InvocationAttempt(record.attemptId(), record.recordedAt(), resolution));
+      }
+    }
+
+    // Sort by recorded timestamp (oldest first)
+    attempts.sort(Comparator.comparing(InvocationAttempt::recordedAt));
+
+    return attempts;
+  }
+
+  @Override
+  public void recordResolution(
+      String processId,
+      String operationId,
+      String attemptId,
+      ResolutionType type,
+      String recoveredResult) {
+
+    Objects.requireNonNull(processId, "processId cannot be null");
+    Objects.requireNonNull(operationId, "operationId cannot be null");
+    Objects.requireNonNull(attemptId, "attemptId cannot be null");
+    Objects.requireNonNull(type, "type cannot be null");
+
+    if (processId.isBlank()) {
+      throw new IllegalArgumentException("processId cannot be blank");
+    }
+    if (operationId.isBlank()) {
+      throw new IllegalArgumentException("operationId cannot be blank");
+    }
+    if (attemptId.isBlank()) {
+      throw new IllegalArgumentException("attemptId cannot be blank");
+    }
+
+    // Validate recoveredResult based on type
+    if (type == ResolutionType.EXECUTED && recoveredResult == null) {
+      throw new IllegalArgumentException("recoveredResult required for EXECUTED resolution");
+    }
+    if (type == ResolutionType.NOT_EXECUTED && recoveredResult != null) {
+      throw new IllegalArgumentException(
+          "recoveredResult must be null for NOT_EXECUTED resolution");
+    }
+
+    IntentKey key = new IntentKey(processId, operationId, attemptId);
+
+    // Check if intent exists
+    if (!intents.containsKey(key)) {
+      throw new InvalidRecoveryResolutionException(
+          "No invocation intent exists for attempt: " + attemptId);
+    }
+
+    // Create new resolution
+    OperationResolution newResolution =
+        type == ResolutionType.NOT_EXECUTED
+            ? OperationResolution.notExecuted(operationId, attemptId, Instant.now())
+            : OperationResolution.executed(operationId, attemptId, recoveredResult, Instant.now());
+
+    // Atomic check-and-set for idempotency and conflict detection
+    OperationResolution existing = resolutions.putIfAbsent(key, newResolution);
+
+    if (existing != null) {
+      // Resolution already exists: check semantic equality
+      if (existing.semanticallyEquals(newResolution)) {
+        // Idempotent: same semantic resolution
+        return;
+      } else {
+        // Conflict: different resolution
+        throw new RecoveryResolutionConflictException(
+            String.format(
+                "Conflicting resolution for attempt %s: existing=%s, new=%s",
+                attemptId, existing.type(), type));
+      }
+    }
+  }
+
+  @Override
+  public Optional<OperationResolution> getResolution(
+      String processId, String operationId, String attemptId) {
+
+    Objects.requireNonNull(processId, "processId cannot be null");
+    Objects.requireNonNull(operationId, "operationId cannot be null");
+    Objects.requireNonNull(attemptId, "attemptId cannot be null");
+
+    if (processId.isBlank()) {
+      throw new IllegalArgumentException("processId cannot be blank");
+    }
+    if (operationId.isBlank()) {
+      throw new IllegalArgumentException("operationId cannot be blank");
+    }
+    if (attemptId.isBlank()) {
+      throw new IllegalArgumentException("attemptId cannot be blank");
+    }
+
+    IntentKey key = new IntentKey(processId, operationId, attemptId);
+    return Optional.ofNullable(resolutions.get(key));
   }
 
   /**
-   * Clear all intents (package-private for testing).
+   * Clear all state (package-private for testing).
    *
    * <p>Not part of InvocationStateStore contract. Used by tests to reset state between test cases.
    */
   void clear() {
     intents.clear();
+    resolutions.clear();
   }
 }

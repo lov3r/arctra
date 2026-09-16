@@ -30,13 +30,13 @@ class InvocationRecoveryClassifierTest {
     PendingToolCall operation = new PendingToolCall("op-123", "tc-123", "test-tool", "{}");
 
     // When - classify
-    InvocationRecoveryClassification classification =
+    RecoveryClassificationResult classification =
         classifier.classify("proc-test", operation);
 
     // Then - definitely not dispatched (intent absent)
-    assertThat(classification)
+    assertThat(classification.type())
         .as("Intent absent should classify as DEFINITELY_NOT_DISPATCHED")
-        .isEqualTo(InvocationRecoveryClassification.DEFINITELY_NOT_DISPATCHED);
+        .isEqualTo(RecoveryClassificationType.DEFINITELY_NOT_DISPATCHED);
   }
 
   // Test 2: Intent Present → MAY_HAVE_INVOKED
@@ -45,7 +45,7 @@ class InvocationRecoveryClassifierTest {
   void intentPresent_shouldClassify_mayHaveInvoked() {
     // Given - store with intent already recorded
     InvocationStateStore store = new InMemoryInvocationStateStore();
-    store.recordInvocationIntent("proc-test", "op-123");
+    store.recordInvocationIntent("proc-test", "op-123", "attempt-test");
 
     InvocationRecoveryClassifier classifier = new InvocationRecoveryClassifier(store);
 
@@ -53,13 +53,13 @@ class InvocationRecoveryClassifierTest {
     PendingToolCall operation = new PendingToolCall("op-123", "tc-123", "test-tool", "{}");
 
     // When - classify
-    InvocationRecoveryClassification classification =
+    RecoveryClassificationResult classification =
         classifier.classify("proc-test", operation);
 
     // Then - may have invoked (intent exists)
-    assertThat(classification)
+    assertThat(classification.type())
         .as("Intent present should classify as MAY_HAVE_INVOKED")
-        .isEqualTo(InvocationRecoveryClassification.MAY_HAVE_INVOKED);
+        .isEqualTo(RecoveryClassificationType.MAY_HAVE_INVOKED);
   }
 
   // Test 3: Read Failure → Exception Propagates
@@ -70,13 +70,34 @@ class InvocationRecoveryClassifierTest {
     InvocationStateStore failingStore =
         new InvocationStateStore() {
           @Override
-          public void recordInvocationIntent(String processId, String operationId) {
+          public void recordInvocationIntent(String processId, String operationId, String attemptId) {
             // Not used in this test
           }
 
           @Override
-          public boolean hasInvocationIntent(String processId, String operationId) {
+          public boolean hasInvocationIntent(String processId, String operationId, String attemptId) {
             throw new RuntimeException("Test storage read failure");
+          }
+
+          @Override
+          public java.util.List<InvocationAttempt> findAttempts(String processId, String operationId) {
+            return java.util.List.of();
+          }
+
+          @Override
+          public void recordResolution(
+              String processId,
+              String operationId,
+              String attemptId,
+              cn.bitcss.arctra.recovery.ResolutionType type,
+              String recoveredResult) {
+            // No-op
+          }
+
+          @Override
+          public java.util.Optional<cn.bitcss.arctra.recovery.OperationResolution> getResolution(
+              String processId, String operationId, String attemptId) {
+            return java.util.Optional.empty();
           }
         };
 
@@ -99,7 +120,7 @@ class InvocationRecoveryClassifierTest {
   void multipleOperations_shouldClassifyIndependently() {
     // Given - store with intent for op-A only
     InvocationStateStore store = new InMemoryInvocationStateStore();
-    store.recordInvocationIntent("proc-test", "op-A");
+    store.recordInvocationIntent("proc-test", "op-A", "attempt-test");
 
     InvocationRecoveryClassifier classifier = new InvocationRecoveryClassifier(store);
 
@@ -107,17 +128,17 @@ class InvocationRecoveryClassifierTest {
     PendingToolCall opB = new PendingToolCall("op-B", "tc-B", "tool-B", "{}");
 
     // When - classify both
-    InvocationRecoveryClassification classA = classifier.classify("proc-test", opA);
-    InvocationRecoveryClassification classB = classifier.classify("proc-test", opB);
+    RecoveryClassificationResult classA = classifier.classify("proc-test", opA);
+    RecoveryClassificationResult classB = classifier.classify("proc-test", opB);
 
     // Then - independent classifications
-    assertThat(classA)
+    assertThat(classA.type())
         .as("op-A has intent")
-        .isEqualTo(InvocationRecoveryClassification.MAY_HAVE_INVOKED);
+        .isEqualTo(RecoveryClassificationType.MAY_HAVE_INVOKED);
 
-    assertThat(classB)
+    assertThat(classB.type())
         .as("op-B has no intent")
-        .isEqualTo(InvocationRecoveryClassification.DEFINITELY_NOT_DISPATCHED);
+        .isEqualTo(RecoveryClassificationType.DEFINITELY_NOT_DISPATCHED);
   }
 
   // Test 5: Process Isolation
@@ -126,23 +147,23 @@ class InvocationRecoveryClassifierTest {
   void differentProcesses_shouldIsolateIntentState() {
     // Given - intent recorded for proc-1 only
     InvocationStateStore store = new InMemoryInvocationStateStore();
-    store.recordInvocationIntent("proc-1", "op-A");
+    store.recordInvocationIntent("proc-1", "op-A", "attempt-test");
 
     InvocationRecoveryClassifier classifier = new InvocationRecoveryClassifier(store);
 
     PendingToolCall operation = new PendingToolCall("op-A", "tc-A", "tool-A", "{}");
 
     // When - classify for proc-1 and proc-2
-    InvocationRecoveryClassification class1 = classifier.classify("proc-1", operation);
-    InvocationRecoveryClassification class2 = classifier.classify("proc-2", operation);
+    RecoveryClassificationResult class1 = classifier.classify("proc-1", operation);
+    RecoveryClassificationResult class2 = classifier.classify("proc-2", operation);
 
     // Then - process isolation
-    assertThat(class1)
+    assertThat(class1.type())
         .as("proc-1 has intent")
-        .isEqualTo(InvocationRecoveryClassification.MAY_HAVE_INVOKED);
+        .isEqualTo(RecoveryClassificationType.MAY_HAVE_INVOKED);
 
-    assertThat(class2)
+    assertThat(class2.type())
         .as("proc-2 has no intent (different process)")
-        .isEqualTo(InvocationRecoveryClassification.DEFINITELY_NOT_DISPATCHED);
+        .isEqualTo(RecoveryClassificationType.DEFINITELY_NOT_DISPATCHED);
   }
 }

@@ -31,10 +31,13 @@ interface ResumedExecutionHandler {
    *
    * <ol>
    *   <li>Protocol reconstruction (approved or rejected)
-   *   <li>Tool execution (if approved)
+   *   <li>Tool execution (if approved) - M6-T5: mixed physical/recovered
    *   <li>Model continuation
    *   <li>Detection of completion or new governance suspension
    * </ol>
+   *
+   * <p>M6-T5: classifications parameter provides recovery execution plan for each operation,
+   * enabling mixed batches with physical execution and recovered results.
    *
    * <p>Returns execution mechanism outcome. Durable state transitions remain caller responsibility.
    *
@@ -43,14 +46,18 @@ interface ResumedExecutionHandler {
    * @param checkpointEvidences accumulated evidences from checkpoint
    * @param signal continuation signal (approved/rejected)
    * @param observationContext tool observation context for event emission
+   * @param classifications recovery classifications (null for same-incarnation resume, non-null for
+   *     cross-incarnation recovery)
    * @return execution outcome (model completed or governance suspended)
+   * @since M6-T5 classifications parameter
    */
   ResumedExecutionOutcome executeResume(
       List<PendingToolCall> pendingBatch,
       RuntimeBinding binding,
       List<Evidence> checkpointEvidences,
       ContinuationSignal signal,
-      ToolObservationContext observationContext);
+      ToolObservationContext observationContext,
+      List<RecoveryClassificationResult> classifications);
 
   /**
    * Persist final completed assistant message to ChatMemory.

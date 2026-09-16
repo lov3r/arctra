@@ -15,8 +15,9 @@ class EventTypeTest {
   void eventType_hasExpectedInitialVocabulary() {
     EventType[] values = EventType.values();
 
-    // M6-T1 initial vocabulary: exactly 11 event types
-    assertThat(values).hasSize(11);
+    // M6-T1 initial vocabulary: 11 event types
+    // M6-T5 added: RECOVERY_UNCERTAIN, RECOVERY_RESOLVED (total: 13)
+    assertThat(values).hasSize(13);
 
     // Verify expected types exist
     assertThat(values)
@@ -29,6 +30,8 @@ class EventTypeTest {
             EventType.RESUMED,
             EventType.TOOL_EXECUTED,
             EventType.TOOL_FAILED,
+            EventType.RECOVERY_UNCERTAIN,
+            EventType.RECOVERY_RESOLVED,
             EventType.CHECKPOINT_CONFLICT,
             EventType.COMPLETED,
             EventType.FAILED);

@@ -1,4 +1,4 @@
-package cn.bitcss.arctra.runtime.react;
+package cn.bitcss.arctra.recovery;
 
 import java.util.List;
 import java.util.Objects;
@@ -30,24 +30,6 @@ import java.util.Objects;
  *
  * <p>Operator must resolve ALL unresolved attempts before recovery can continue. Use {@link
  * #getUnresolvedAttemptIds()} to enumerate attempts requiring resolution.
- *
- * <h2>What This Is NOT</h2>
- *
- * <ul>
- *   <li>NOT a retry policy decision
- *   <li>NOT a recoverable error (no automatic retry)
- *   <li>NOT an automatic operator intervention workflow
- *   <li>NOT a signal to external reconciliation systems
- *   <li>NOT a Control Plane concern
- * </ul>
- *
- * <h2>What This IS</h2>
- *
- * <ul>
- *   <li>IS a safety exception preventing uncertain duplicate side effects
- *   <li>IS the correct behavior under fail-closed policy
- *   <li>IS waiting on explicit operator resolution via RecoveryResolution API
- * </ul>
  *
  * <p><strong>Checkpoint remains valid.</strong> Exception is thrown before CHECK B, so suspended
  * state is preserved for future recovery attempts.

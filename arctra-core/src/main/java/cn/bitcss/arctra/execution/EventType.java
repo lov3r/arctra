@@ -203,6 +203,44 @@ public enum EventType {
    */
   TOOL_FAILED,
 
+  // Recovery (M6-T5)
+
+  /**
+   * Recovery classification detected uncertain invocation state.
+   *
+   * <p><strong>M6-T5: Recovery fail-closed boundary.</strong>
+   *
+   * <p>One or more physical invocation attempts for a logical operation have uncertain state after
+   * restart. Physical invocation may have already occurred but external outcome is unknown.
+   *
+   * <p><strong>Domain commit point:</strong> Recovery classification has authoritatively determined
+   * that at least one physical attempt has invocation intent but no recovery resolution.
+   *
+   * <p>This event is emitted before throwing {@code RecoveryUncertaintyException}. Checkpoint
+   * remains valid. Operator resolution required via RecoveryResolution API.
+   *
+   * @since M6-T5
+   */
+  RECOVERY_UNCERTAIN,
+
+  /**
+   * Recovery resolution recorded.
+   *
+   * <p><strong>M6-T5: Durable recovery resolution.</strong>
+   *
+   * <p>Operator/reconciliation authority provided a recovery decision (NOT_EXECUTED or EXECUTED) for
+   * an uncertain physical attempt. Resolution has been durably persisted.
+   *
+   * <p><strong>Domain commit point:</strong> Recovery resolution commit succeeded. The resolution
+   * fact is now durable and visible to all runtime instances.
+   *
+   * <p>This event is emitted AFTER successful resolution persistence, not before. Emission failure
+   * does not reverse the committed resolution.
+   *
+   * @since M6-T5
+   */
+  RECOVERY_RESOLVED,
+
   // Checkpoint conflicts (M5 precise semantics)
 
   /**

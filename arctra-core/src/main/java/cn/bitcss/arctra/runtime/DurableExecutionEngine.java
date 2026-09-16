@@ -76,4 +76,19 @@ public interface DurableExecutionEngine extends AgentExecutionEngine {
    */
   AgentResult resumeProcess(
       String processId, long checkpointVersion, ContinuationSignal signal);
+
+  /**
+   * Access recovery resolution capability (M6-T5).
+   *
+   * <p><strong>M6-T5: Durable Recovery Execution & Resolution.</strong>
+   *
+   * <p>Returns the recovery resolution API for operator-driven resolution of uncertain physical
+   * invocation attempts. When recovery classification detects {@code MAY_HAVE_INVOKED} status,
+   * operator can use this API to instruct the engine how to proceed based on external
+   * reconciliation.
+   *
+   * @return recovery resolution capability
+   * @since M6-T5
+   */
+  RecoveryResolution recovery();
 }

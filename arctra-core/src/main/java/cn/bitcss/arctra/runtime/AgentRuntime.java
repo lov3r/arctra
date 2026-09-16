@@ -160,4 +160,47 @@ public interface AgentRuntime {
    */
   AgentResult resumeProcess(
       String processId, long checkpointVersion, ContinuationSignal signal);
+
+  /**
+   * Access recovery resolution capability (M6-T5).
+   *
+   * <p><strong>M6-T5: Durable Recovery Execution & Resolution.</strong>
+   *
+   * <p>Returns the recovery resolution API for operator-driven resolution of uncertain physical
+   * invocation attempts. When recovery classification detects {@code MAY_HAVE_INVOKED} status after
+   * restart, operator can use this API to instruct Arctra how to proceed based on external
+   * reconciliation.
+   *
+   * <p><strong>Requires durable-capable engine:</strong> The underlying {@link
+   * AgentExecutionEngine} must implement {@link DurableExecutionEngine}. If not, this method throws
+   * {@link UnsupportedOperationException}.
+   *
+   * <h3>Usage Pattern</h3>
+   *
+   * <pre>{@code
+   * try {
+   *   runtime.resumeProcess(processId, version, signal);
+   * } catch (RecoveryUncertaintyException e) {
+   *   // Operator reconciles external system state
+   *   for (String attemptId : e.getUnresolvedAttemptIds()) {
+   *     if (externalSystem.wasExecuted(attemptId)) {
+   *       String result = externalSystem.getResult(attemptId);
+   *       runtime.recovery().resolveAsExecuted(
+   *           e.getProcessId(), version, e.getOperationId(), attemptId, result);
+   *     } else {
+   *       runtime.recovery().resolveAsNotExecuted(
+   *           e.getProcessId(), version, e.getOperationId(), attemptId);
+   *     }
+   *   }
+   *   // Retry resume
+   *   runtime.resumeProcess(processId, version, signal);
+   * }
+   * }</pre>
+   *
+   * @return recovery resolution capability
+   * @throws UnsupportedOperationException if engine does not implement {@link
+   *     DurableExecutionEngine}
+   * @since M6-T5
+   */
+  RecoveryResolution recovery();
 }

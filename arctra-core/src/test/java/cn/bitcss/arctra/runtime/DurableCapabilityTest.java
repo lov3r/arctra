@@ -236,5 +236,10 @@ class DurableCapabilityTest {
         AgentDefinition definition, AgentRequest request, AgentExecutionContext context) {
       throw new UnsupportedOperationException("Not used in these tests");
     }
+
+    @Override
+    public RecoveryResolution recovery() {
+      throw new UnsupportedOperationException("Not used in these tests");
+    }
   }
 }

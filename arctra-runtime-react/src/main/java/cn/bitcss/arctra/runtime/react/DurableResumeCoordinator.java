@@ -12,6 +12,7 @@ import cn.bitcss.arctra.execution.ExecutionEvent;
 import cn.bitcss.arctra.execution.ExecutionEventListener;
 import cn.bitcss.arctra.process.AgentProcess;
 import cn.bitcss.arctra.process.ContinuationSignal;
+import cn.bitcss.arctra.recovery.RecoveryUncertaintyException;
 import cn.bitcss.arctra.runtime.ProcessFactory;
 import cn.bitcss.arctra.runtime.ResumePreparationException;
 import cn.bitcss.arctra.runtime.RuntimeBinding;
@@ -69,6 +70,8 @@ final class DurableResumeCoordinator {
   private final cn.bitcss.arctra.runtime.DurableExecutionEngine durableEngine;
   // M6-T4C Phase 1: Recovery classifier (package-private internal)
   private final InvocationRecoveryClassifier recoveryClassifier;
+  // M6-T5: Recovery resolution capability (lazy-initialized)
+  private cn.bitcss.arctra.runtime.RecoveryResolution recoveryResolution;
 
   /**
    * Construct durable resume coordinator.
@@ -99,6 +102,23 @@ final class DurableResumeCoordinator {
         Objects.requireNonNull(durableEngine, "durableEngine cannot be null");
     this.recoveryClassifier =
         Objects.requireNonNull(recoveryClassifier, "recoveryClassifier cannot be null");
+  }
+
+  /**
+   * Access recovery resolution capability (M6-T5).
+   *
+   * <p>Lazy-initializes the RecoveryResolution instance on first access.
+   *
+   * @return recovery resolution API
+   * @since M6-T5
+   */
+  cn.bitcss.arctra.runtime.RecoveryResolution recovery() {
+    if (recoveryResolution == null) {
+      InvocationStateStore invocationStateStore = recoveryClassifier.getInvocationStateStore();
+      recoveryResolution =
+          new DefaultRecoveryResolution(checkpointStore, invocationStateStore, eventListener);
+    }
+    return recoveryResolution;
   }
 
   /**
@@ -246,7 +266,8 @@ final class DurableResumeCoordinator {
             binding,
             historicalEvidences,
             signal,
-            baseObservationContext);
+            baseObservationContext,
+            null); // Same-incarnation: no recovery classification needed
 
     // Handle provider outcome with CHECK B
     return handleResumedExecutionOutcome(
@@ -283,11 +304,12 @@ final class DurableResumeCoordinator {
     // Resolve binding first (needed for execution)
     RuntimeBinding binding = resolveBinding(checkpoint.processId(), checkpoint);
 
-    // RECOVERY CLASSIFICATION GATE (M6-T4C Phase 1)
+    // RECOVERY CLASSIFICATION GATE (M6-T5: Multi-attempt aggregation)
     // Only for APPROVE - REJECT does not invoke tools physically
+    List<RecoveryClassificationResult> classifications = null;
     if (signal instanceof ContinuationSignal.ApprovalSignal approvalSignal
         && approvalSignal.approved()) {
-      classifyApprovedBatchOrFailClosed(checkpoint.processId(), checkpoint.pendingBatch());
+      classifications = classifyApprovedBatchOrFailClosed(checkpoint.processId(), checkpoint.pendingBatch());
     }
 
     // After classification gate passed, continue with normal orchestration
@@ -302,7 +324,7 @@ final class DurableResumeCoordinator {
             "{\"checkpointVersion\": %d, \"runtimeBindingKey\": \"%s\", \"recoveryMode\": true}",
             checkpoint.checkpointVersion(), checkpoint.runtimeBindingKey()));
 
-    // Delegate to resumed execution handler (same as normal path)
+    // Delegate to resumed execution handler (M6-T5: pass classifications)
     List<Evidence> historicalEvidences = checkpoint.accumulatedEvidences();
     ToolObservationContext baseObservationContext =
         new ToolObservationContext(
@@ -317,7 +339,8 @@ final class DurableResumeCoordinator {
             binding,
             historicalEvidences,
             signal,
-            baseObservationContext);
+            baseObservationContext,
+            classifications);
 
     // Handle provider outcome with CHECK B (same as normal path)
     return handleResumedExecutionOutcome(
@@ -348,31 +371,85 @@ final class DurableResumeCoordinator {
    * @throws RecoveryUncertaintyException if any operation MAY_HAVE_INVOKED
    * @throws RuntimeException if invocation-state read fails (fail closed)
    */
-  private void classifyApprovedBatchOrFailClosed(
+  /**
+   * Classify entire approved batch and fail closed on uncertainty.
+   *
+   * <p><strong>M6-T5: Whole-batch preflight with multi-attempt aggregation.</strong>
+   *
+   * <p>Performs recovery classification for ALL operations in the pending batch before allowing any
+   * physical invocation. If ANY operation has uncertain state (unresolved attempts), entire recovery
+   * fails closed.
+   *
+   * @param processId process ID
+   * @param pendingBatch approved operations to classify
+   * @return list of classification results (only if all safe)
+   * @throws RecoveryUncertaintyException if any operation has unresolved attempts
+   * @since M6-T4C Phase 1
+   * @since M6-T5 Multi-attempt aggregation
+   */
+  private List<RecoveryClassificationResult> classifyApprovedBatchOrFailClosed(
       String processId, List<PendingToolCall> pendingBatch) {
 
-    // Classify entire batch before any execution
+    List<RecoveryClassificationResult> results = new java.util.ArrayList<>();
+
+    // Whole-batch preflight: classify ALL operations before execution
     for (PendingToolCall operation : pendingBatch) {
-      InvocationRecoveryClassification classification =
+      RecoveryClassificationResult classification =
           recoveryClassifier.classify(processId, operation);
 
-      if (classification == InvocationRecoveryClassification.MAY_HAVE_INVOKED) {
-        // Uncertain operation detected - fail closed
-        // Checkpoint preserved, no execution, manual investigation required
+      if (classification instanceof MayHaveInvoked mayHaveInvoked) {
+        // Uncertain operation detected - fail closed BEFORE any execution
+        // Emit RECOVERY_UNCERTAIN event
+        emitRecoveryUncertainEvent(
+            processId, operation.operationId(), mayHaveInvoked.unresolvedAttemptIds());
+
+        // Throw exception with all unresolved attempts
         throw new RecoveryUncertaintyException(
             String.format(
-                "Recovery cannot proceed: operation %s (tool: %s) may have already been invoked. "
+                "Recovery cannot proceed: operation %s (tool: %s) has %d unresolved physical attempt(s). "
                     + "Invocation intent exists but external outcome unknown. "
-                    + "Manual investigation required to determine safe recovery action. "
-                    + "Process: %s, checkpoint will be preserved for operator review.",
-                operation.operationId(), operation.toolName(), processId),
+                    + "Operator resolution required via runtime.recovery() API. "
+                    + "Process: %s, checkpoint preserved.",
+                operation.operationId(),
+                operation.toolName(),
+                mayHaveInvoked.unresolvedAttemptIds().size(),
+                processId),
             processId,
-            operation.operationId());
+            operation.operationId(),
+            mayHaveInvoked.unresolvedAttemptIds());
       }
-      // DEFINITELY_NOT_DISPATCHED - continue checking remaining operations
+
+      results.add(classification);
     }
 
-    // All operations safe - proceed to execution (return normally)
+    // All operations safe - return classifications for execution planning
+    return results;
+  }
+
+  /**
+   * Emit RECOVERY_UNCERTAIN event.
+   *
+   * @param processId process ID
+   * @param operationId operation ID
+   * @param unresolvedAttemptIds list of unresolved attempt IDs
+   */
+  private void emitRecoveryUncertainEvent(
+      String processId, String operationId, List<String> unresolvedAttemptIds) {
+    try {
+      String attemptIdsJson =
+          unresolvedAttemptIds.stream()
+              .map(id -> "\"" + id + "\"")
+              .collect(java.util.stream.Collectors.joining(","));
+
+      String payload =
+          String.format(
+              "{\"operationId\":\"%s\",\"attemptIds\":[%s]}", operationId, attemptIdsJson);
+
+      eventListener.onEvent(
+          new ExecutionEvent(processId, EventType.RECOVERY_UNCERTAIN, null, payload));
+    } catch (Exception e) {
+      // Event projection failure does not affect recovery classification
+    }
   }
 
   /**

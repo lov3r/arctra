@@ -38,6 +38,11 @@ class ProcessExceptionLifecycleTest {
         AgentDefinition definition, AgentRequest request, AgentExecutionContext context) {
       throw new UnsupportedOperationException("Not used in tests");
     }
+
+    @Override
+    public RecoveryResolution recovery() {
+      throw new UnsupportedOperationException("Not used in tests");
+    }
   }
 
   /**

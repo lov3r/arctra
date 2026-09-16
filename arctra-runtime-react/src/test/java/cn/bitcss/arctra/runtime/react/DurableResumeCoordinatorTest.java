@@ -437,7 +437,8 @@ class DurableResumeCoordinatorTest {
         RuntimeBinding binding,
         List<Evidence> checkpointEvidences,
         ContinuationSignal signal,
-        ToolObservationContext observationContext) {
+        ToolObservationContext observationContext,
+        List<RecoveryClassificationResult> classifications) {
 
       invocationCount++;
 
@@ -467,6 +468,11 @@ class DurableResumeCoordinatorTest {
     @Override
     public AgentResult resumeProcess(
         String processId, long checkpointVersion, ContinuationSignal signal) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public cn.bitcss.arctra.runtime.RecoveryResolution recovery() {
       throw new UnsupportedOperationException();
     }
   }

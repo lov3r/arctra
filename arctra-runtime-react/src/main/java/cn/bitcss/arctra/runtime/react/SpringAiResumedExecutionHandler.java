@@ -118,7 +118,8 @@ final class SpringAiResumedExecutionHandler implements ResumedExecutionHandler {
       RuntimeBinding binding,
       List<Evidence> checkpointEvidences,
       ContinuationSignal signal,
-      ToolObservationContext observationContext) {
+      ToolObservationContext observationContext,
+      List<RecoveryClassificationResult> classifications) {
 
     // Get conversation history from ChatMemory
     List<Message> conversationHistory = getConversationHistory(binding.context());
@@ -130,14 +131,15 @@ final class SpringAiResumedExecutionHandler implements ResumedExecutionHandler {
     List<Message> continuationMessages;
     if (signal instanceof ContinuationSignal.ApprovalSignal approval) {
       if (approval.approved()) {
-        // APPROVED: execute pending batch
+        // APPROVED: execute pending batch (M6-T5: with recovery classifications)
         continuationMessages =
             reconstructAndExecuteApproved(
                 pendingBatch,
                 conversationHistory,
                 checkpointEvidences,
                 newEvidences,
-                observationContext);
+                observationContext,
+                classifications);
       } else {
         // REJECTED: construct denial responses
         continuationMessages = reconstructDenialResponses(pendingBatch, conversationHistory);
@@ -198,17 +200,31 @@ final class SpringAiResumedExecutionHandler implements ResumedExecutionHandler {
    *
    * @return continuation messages with ToolResponseMessages
    */
+  /**
+   * Reconstruct approved protocol and execute pending batch.
+   *
+   * <p>M6-T5: Supports mixed physical/recovered execution based on classifications.
+   *
+   * @param classifications recovery classifications (null for same-incarnation, non-null for recovery)
+   * @return continuation messages with ToolResponseMessages
+   */
   private List<Message> reconstructAndExecuteApproved(
       List<PendingToolCall> pendingBatch,
       List<Message> conversationHistory,
       List<Evidence> checkpointEvidences,
       List<Evidence> newEvidences,
-      ToolObservationContext observationContext) {
+      ToolObservationContext observationContext,
+      List<RecoveryClassificationResult> classifications) {
 
     ProtocolReconstructor reconstructor = new ProtocolReconstructor(tools, invocationStateStore);
 
     return reconstructor.executeApprovedBatch(
-        pendingBatch, conversationHistory, checkpointEvidences, newEvidences, observationContext);
+        pendingBatch,
+        conversationHistory,
+        checkpointEvidences,
+        newEvidences,
+        observationContext,
+        classifications);
   }
 
   /**

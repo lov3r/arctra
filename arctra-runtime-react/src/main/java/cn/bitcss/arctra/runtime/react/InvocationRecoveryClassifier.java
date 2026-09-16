@@ -1,62 +1,44 @@
 package cn.bitcss.arctra.runtime.react;
 
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
+import cn.bitcss.arctra.recovery.OperationResolution;
+import cn.bitcss.arctra.recovery.RecoveryResolutionConflictException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Invocation recovery classifier for pending operations.
  *
  * <p><strong>M6-T4C Phase 1: Recovery classification authority.</strong>
  *
- * <p>Classifies pending tool operations based on {@link InvocationStateStore} intent state to
- * distinguish operations safe to execute from those requiring recovery policy.
+ * <p><strong>M6-T5: Multi-attempt aggregation.</strong>
+ *
+ * <p>Classifies pending tool operations based on {@link InvocationStateStore} intent and resolution
+ * state to distinguish operations safe to execute from those requiring recovery policy.
+ *
+ * <h2>M6-T5.1: Operation-Level Aggregation</h2>
+ *
+ * <p>A logical operation may have multiple physical attempts due to concurrent workers or retries.
+ * Classification aggregates ALL attempts for an operation:
+ *
+ * <pre>
+ * Rule 1: No attempts → DEFINITELY_NOT_DISPATCHED
+ * Rule 2: ANY unresolved attempt → MAY_HAVE_INVOKED (fail-closed)
+ * Rule 3: No unresolved + ANY EXECUTED → RESOLVED_EXECUTED
+ * Rule 4: All attempts NOT_EXECUTED → RESOLVED_NOT_EXECUTED (eligible for new attempt)
+ * </pre>
  *
  * <h2>Responsibility</h2>
  *
- * <p>Sole responsibility: Query invocation-intent authority and produce classification fact.
+ * <p>Sole responsibility: Query invocation-state authority and produce classification fact for each
+ * logical operation in a pending batch.
  *
- * <pre>
- * PendingToolCall + processId + InvocationStateStore
- *   → DEFINITELY_NOT_DISPATCHED (safe)
- *   → MAY_HAVE_INVOKED (uncertain)
- * </pre>
- *
- * <h2>Classification Truth Table</h2>
- *
- * <ul>
- *   <li>{@code hasInvocationIntent() = false} → {@link
- *       InvocationRecoveryClassification#DEFINITELY_NOT_DISPATCHED}
- *   <li>{@code hasInvocationIntent() = true} → {@link
- *       InvocationRecoveryClassification#MAY_HAVE_INVOKED}
- *   <li>{@code hasInvocationIntent() throws} → exception propagates (unknown ≠ absent)
- * </ul>
- *
- * <h2>Side-Effect Free</h2>
- *
- * <p>This classifier is read-only. It does NOT:
- *
- * <ul>
- *   <li>Write invocation intent
- *   <li>Invoke tools
- *   <li>Modify checkpoints
- *   <li>Emit execution events
- *   <li>Query external systems
- *   <li>Make recovery policy decisions
- * </ul>
- *
- * <h2>Authority Boundaries</h2>
- *
- * <p>Depends ONLY on {@link InvocationStateStore} (invocation-intent authority). Does NOT depend
- * on:
- *
- * <ul>
- *   <li>ExecutionLedger (event absence not authoritative)
- *   <li>External systems (external outcome unknown)
- *   <li>Checkpoint metadata (no restart markers)
- * </ul>
- *
- * @author lov3r
- * @since M6-T4C Phase 1
+ * @since M6-T4C
+ * @since M6-T5 Multi-attempt aggregation
  */
 final class InvocationRecoveryClassifier {
 
@@ -65,7 +47,8 @@ final class InvocationRecoveryClassifier {
   /**
    * Create classifier.
    *
-   * @param invocationStateStore invocation-intent authority
+   * @param invocationStateStore invocation-state authority
+   * @throws NullPointerException if invocationStateStore is null
    */
   InvocationRecoveryClassifier(InvocationStateStore invocationStateStore) {
     this.invocationStateStore =
@@ -73,34 +56,91 @@ final class InvocationRecoveryClassifier {
   }
 
   /**
-   * Classify pending operation.
+   * Classify operation by aggregating all physical attempts.
    *
-   * <p>Queries invocation-intent state to determine whether operation is safe to execute.
+   * <p><strong>M6-T5.1: Multi-attempt aggregation.</strong>
    *
-   * <p><strong>Read failure semantics:</strong> If {@link
-   * InvocationStateStore#hasInvocationIntent(String, String)} throws, the exception propagates.
-   * Storage read failure does NOT become {@code false} classification. Unknown state must not be
-   * treated as definitive absence.
+   * <p>Queries all durable attempts for the logical operation and applies aggregation rules.
    *
    * @param processId process identifier
-   * @param operation pending tool operation to classify
-   * @return classification (DEFINITELY_NOT_DISPATCHED or MAY_HAVE_INVOKED)
+   * @param operation pending tool call
+   * @return classification result
    * @throws RuntimeException if invocation-state read fails (fail closed)
    */
-  InvocationRecoveryClassification classify(String processId, PendingToolCall operation) {
+  RecoveryClassificationResult classify(String processId, PendingToolCall operation) {
     Objects.requireNonNull(processId, "processId cannot be null");
     Objects.requireNonNull(operation, "operation cannot be null");
 
-    // Query invocation-intent authority
-    // If this throws (storage failure), exception propagates - unknown != absent
-    boolean hasIntent = invocationStateStore.hasInvocationIntent(processId, operation.operationId());
+    String operationId = operation.operationId();
 
-    if (hasIntent) {
-      // Intent exists → gate was crossed → physical invocation may have occurred
-      return InvocationRecoveryClassification.MAY_HAVE_INVOKED;
-    } else {
-      // Intent authoritatively absent → gate never crossed → safe to execute
-      return InvocationRecoveryClassification.DEFINITELY_NOT_DISPATCHED;
+    // Query all attempts for this operation
+    List<InvocationAttempt> attempts = invocationStateStore.findAttempts(processId, operationId);
+
+    // Rule 1: No attempts → DEFINITELY_NOT_DISPATCHED
+    if (attempts.isEmpty()) {
+      return RecoveryClassificationResult.definitelyNotDispatched(operationId);
     }
+
+    // Rule 2: ANY unresolved attempt → MAY_HAVE_INVOKED
+    List<String> unresolvedAttemptIds =
+        attempts.stream()
+            .filter(InvocationAttempt::isUnresolved)
+            .map(InvocationAttempt::attemptId)
+            .collect(Collectors.toList());
+
+    if (!unresolvedAttemptIds.isEmpty()) {
+      return RecoveryClassificationResult.mayHaveInvoked(operationId, unresolvedAttemptIds);
+    }
+
+    // Rule 3: No unresolved + ANY EXECUTED → RESOLVED_EXECUTED
+    List<InvocationAttempt> executedAttempts =
+        attempts.stream().filter(InvocationAttempt::isResolvedExecuted).toList();
+
+    if (!executedAttempts.isEmpty()) {
+      // Validate result consistency if multiple EXECUTED resolutions exist
+      if (executedAttempts.size() > 1) {
+        validateExecutedResultConsistency(operationId, executedAttempts);
+      }
+
+      // Use the first EXECUTED resolution
+      OperationResolution resolution = executedAttempts.get(0).resolution().orElseThrow();
+      return RecoveryClassificationResult.resolvedExecuted(
+          operationId, resolution.attemptId(), resolution.recoveredResult().orElseThrow());
+    }
+
+    // Rule 4: All attempts RESOLVED_NOT_EXECUTED → eligible for new attempt
+    return RecoveryClassificationResult.resolvedNotExecuted(operationId);
+  }
+
+  /**
+   * Validate that multiple EXECUTED resolutions have consistent results.
+   *
+   * <p>Throws {@link RecoveryResolutionConflictException} if different results exist.
+   */
+  private void validateExecutedResultConsistency(
+      String operationId, List<InvocationAttempt> executedAttempts) {
+
+    Set<String> distinctResults = new HashSet<>();
+    for (InvocationAttempt attempt : executedAttempts) {
+      String result = attempt.resolution().flatMap(OperationResolution::recoveredResult).orElse("");
+      distinctResults.add(result);
+    }
+
+    if (distinctResults.size() > 1) {
+      throw new RecoveryResolutionConflictException(
+          String.format(
+              "Multiple EXECUTED resolutions with different results for operation %s: %s",
+              operationId, distinctResults));
+    }
+  }
+
+  /**
+   * Get the invocation state store (package-private for coordinator access).
+   *
+   * @return invocation state store
+   * @since M6-T5
+   */
+  InvocationStateStore getInvocationStateStore() {
+    return invocationStateStore;
   }
 }

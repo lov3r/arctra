@@ -4,6 +4,7 @@ import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.evidence.Evidence;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -90,10 +91,11 @@ class ProtocolReconstructor {
       List<Message> conversationHistory,
       List<Evidence> checkpointEvidences,
       List<Evidence> newEvidences,
-      ToolObservationContext baseObservationContext) {
+      ToolObservationContext baseObservationContext,
+      List<RecoveryClassificationResult> classifications) {
 
     return executeApprovedBatchInternal(
-        pendingBatch, conversationHistory, checkpointEvidences, newEvidences, baseObservationContext);
+        pendingBatch, conversationHistory, checkpointEvidences, newEvidences, baseObservationContext, classifications);
   }
 
   /**
@@ -162,7 +164,8 @@ class ProtocolReconstructor {
       List<Message> conversationHistory,
       List<Evidence> checkpointEvidences,
       List<Evidence> newEvidences,
-      ToolObservationContext baseObservationContext) {
+      ToolObservationContext baseObservationContext,
+      List<RecoveryClassificationResult> classifications) {
 
     // Reconstruct AssistantMessage with original ToolCalls (for protocol compliance)
     List<AssistantMessage.ToolCall> toolCalls =
@@ -182,25 +185,87 @@ class ProtocolReconstructor {
             .toolCalls(toolCalls)
             .build();
 
-    // M6-T3B: Direct per-operation execution
+    // M6-T5: Mixed physical/recovered execution
     List<ToolResponseMessage.ToolResponse> toolResponses = new ArrayList<>();
 
-    for (PendingToolCall operation : pendingBatch) {
-      ToolResponseMessage.ToolResponse response =
-          executeOperation(operation, conversationHistory, newEvidences, baseObservationContext);
+    for (int i = 0; i < pendingBatch.size(); i++) {
+      PendingToolCall operation = pendingBatch.get(i);
+      RecoveryClassificationResult classification = (classifications != null && i < classifications.size())
+          ? classifications.get(i)
+          : null;
+
+      ToolResponseMessage.ToolResponse response = executeOrRecoverOperation(
+          operation, classification, conversationHistory, newEvidences, baseObservationContext);
       toolResponses.add(response);
     }
 
-    // Build ToolResponseMessage with responses
+    // Build ToolResponseMessage using builder
     ToolResponseMessage toolResponseMessage =
         ToolResponseMessage.builder().responses(toolResponses).build();
 
-    // Return continuation messages: history + AssistantMessage + ToolResponseMessage
-    List<Message> result = new ArrayList<>(conversationHistory);
-    result.add(rebuiltAssistantMessage);
-    result.add(toolResponseMessage);
+    // Return continuation: [history..., assistant, toolResponses]
+    List<Message> continuation = new ArrayList<>(conversationHistory);
+    continuation.add(rebuiltAssistantMessage);
+    continuation.add(toolResponseMessage);
 
-    return result;
+    return continuation;
+  }
+
+  /**
+   * Execute or recover one operation based on classification.
+   *
+   * <p><strong>M6-T5: Mixed Execution Dispatch.</strong>
+   *
+   * <ul>
+   *   <li>DEFINITELY_NOT_DISPATCHED → physical execution (new attempt)
+   *   <li>RESOLVED_NOT_EXECUTED → physical execution (new attempt)
+   *   <li>RESOLVED_EXECUTED → recovered response (skip delegate)
+   *   <li>null classification → physical execution (same-incarnation)
+   * </ul>
+   *
+   * @param operation pending operation
+   * @param classification recovery classification (null for same-incarnation)
+   * @param conversationHistory conversation for ToolContext
+   * @param newEvidences evidence sink
+   * @param baseObservationContext observation context
+   * @return ToolResponse with original toolCallId
+   */
+  private ToolResponseMessage.ToolResponse executeOrRecoverOperation(
+      PendingToolCall operation,
+      RecoveryClassificationResult classification,
+      List<Message> conversationHistory,
+      List<Evidence> newEvidences,
+      ToolObservationContext baseObservationContext) {
+
+    // Check if this is a recovered EXECUTED result
+    if (classification instanceof ResolvedExecuted resolved) {
+      return constructRecoveredResponse(operation, resolved.recoveredResult());
+    }
+
+    // All other cases: physical execution with new attempt
+    // (DEFINITELY_NOT_DISPATCHED, RESOLVED_NOT_EXECUTED, null)
+    return executeOperation(operation, conversationHistory, newEvidences, baseObservationContext);
+  }
+
+  /**
+   * Construct recovered ToolResponse without physical execution.
+   *
+   * <p><strong>M6-T5: Recovered Result Path.</strong>
+   *
+   * <p>Uses recovered result from resolution, preserving original toolCallId for protocol.
+   * NO delegate invocation, NO TOOL_EXECUTED/TOOL_FAILED events.
+   *
+   * @param operation original pending operation
+   * @param recoveredResult recovered result string
+   * @return ToolResponse with original toolCallId
+   */
+  private ToolResponseMessage.ToolResponse constructRecoveredResponse(
+      PendingToolCall operation, String recoveredResult) {
+
+    return new ToolResponseMessage.ToolResponse(
+        operation.toolCallId(),  // Preserve original toolCallId
+        operation.toolName(),    // Preserve tool name
+        recoveredResult);        // Use recovered result
   }
 
   /**
@@ -287,12 +352,14 @@ class ProtocolReconstructor {
     EvidenceCapturingToolCallback wrappedCallback =
         new EvidenceCapturingToolCallback(selectedTool, newEvidences, operationContext);
 
-    // M6-T4A: INVOCATION INTENT GATE (hard gate before physical invocation)
-    // MANDATORY for checkpoint-backed durable execution - no bypass allowed
+    // M6-T5: PHYSICAL ATTEMPT GATE - Generate unique attemptId for this physical invocation
+    String attemptId = AttemptIds.generate();
+
+    // M6-T5: INVOCATION INTENT GATE (hard gate before physical invocation)
+    // Record intent with unique attemptId - MANDATORY for checkpoint-backed durable execution
     invocationStateStore.recordInvocationIntent(
-        operationContext.processId(), operation.operationId());
-    // If recordInvocationIntent throws InvocationIntentPersistenceException,
-    // execution stops here. Physical invocation MUST NOT proceed.
+        operationContext.processId(), operation.operationId(), attemptId);
+    // If recordInvocationIntent throws, execution stops here. Physical invocation MUST NOT proceed.
 
     // Execute tool with ToolContext (semantic parity with ToolCallingManager)
     // Spring AI 2.0.0: ToolContext is Map<String, Object>, pass conversation history

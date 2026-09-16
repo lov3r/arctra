@@ -29,15 +29,36 @@ class InvocationIntentGateTest {
     InvocationStateStore failingStore =
         new InvocationStateStore() {
           @Override
-          public void recordInvocationIntent(String processId, String operationId) {
+          public void recordInvocationIntent(String processId, String operationId, String attemptId) {
             throw new InvocationIntentPersistenceException(
                 "Test persistence failure for process=" + processId + ", operation=" + operationId);
           }
 
           @Override
-          public boolean hasInvocationIntent(String processId, String operationId) {
+          public boolean hasInvocationIntent(String processId, String operationId, String attemptId) {
             // Not used in this test
             return false;
+          }
+
+          @Override
+          public java.util.List<InvocationAttempt> findAttempts(String processId, String operationId) {
+            return java.util.List.of();
+          }
+
+          @Override
+          public void recordResolution(
+              String processId,
+              String operationId,
+              String attemptId,
+              cn.bitcss.arctra.recovery.ResolutionType type,
+              String recoveredResult) {
+            // No-op
+          }
+
+          @Override
+          public java.util.Optional<cn.bitcss.arctra.recovery.OperationResolution> getResolution(
+              String processId, String operationId, String attemptId) {
+            return java.util.Optional.empty();
           }
         };
 
@@ -73,7 +94,8 @@ class InvocationIntentGateTest {
                     conversationHistory,
                     checkpointEvidences,
                     newEvidences,
-                    observationContext))
+                    observationContext,
+                    List.of()))
         .isInstanceOf(InvocationIntentPersistenceException.class)
         .hasMessageContaining("Test persistence failure")
         .hasMessageContaining("proc-test")
@@ -121,7 +143,8 @@ class InvocationIntentGateTest {
             conversationHistory,
             checkpointEvidences,
             newEvidences,
-            observationContext);
+            observationContext,
+            List.of());
 
     // Then - delegate WAS called (after successful intent recording)
     assertThat(delegateCallCount.get())
@@ -129,7 +152,7 @@ class InvocationIntentGateTest {
         .isEqualTo(1);
 
     // Then - intent was recorded
-    assertThat(successfulStore.hasInvocationIntent("proc-test", "op-123"))
+    assertThat(successfulStore.hasInvocationIntent("proc-test", "op-123", "attempt-test"))
         .as("Intent should be recorded before execution")
         .isTrue();
 
@@ -149,14 +172,35 @@ class InvocationIntentGateTest {
           private final InMemoryInvocationStateStore delegate = new InMemoryInvocationStateStore();
 
           @Override
-          public void recordInvocationIntent(String processId, String operationId) {
+          public void recordInvocationIntent(String processId, String operationId, String attemptId) {
             executionOrder.add("INTENT_RECORDED:" + operationId);
-            delegate.recordInvocationIntent(processId, operationId);
+            delegate.recordInvocationIntent(processId, operationId, attemptId);
           }
 
           @Override
-          public boolean hasInvocationIntent(String processId, String operationId) {
-            return delegate.hasInvocationIntent(processId, operationId);
+          public boolean hasInvocationIntent(String processId, String operationId, String attemptId) {
+            return delegate.hasInvocationIntent(processId, operationId, attemptId);
+          }
+
+          @Override
+          public java.util.List<InvocationAttempt> findAttempts(String processId, String operationId) {
+            return delegate.findAttempts(processId, operationId);
+          }
+
+          @Override
+          public void recordResolution(
+              String processId,
+              String operationId,
+              String attemptId,
+              cn.bitcss.arctra.recovery.ResolutionType type,
+              String recoveredResult) {
+            delegate.recordResolution(processId, operationId, attemptId, type, recoveredResult);
+          }
+
+          @Override
+          public java.util.Optional<cn.bitcss.arctra.recovery.OperationResolution> getResolution(
+              String processId, String operationId, String attemptId) {
+            return delegate.getResolution(processId, operationId, attemptId);
           }
         };
 
@@ -177,7 +221,7 @@ class InvocationIntentGateTest {
 
     // When
     reconstructor.executeApprovedBatch(
-        List.of(pendingOp), List.of(), List.of(), new ArrayList<>(), observationContext);
+        List.of(pendingOp), List.of(), List.of(), new ArrayList<>(), observationContext, List.of());
 
     // Then - intent recorded BEFORE delegate called
     assertThat(executionOrder)
@@ -217,12 +261,12 @@ class InvocationIntentGateTest {
     assertThatThrownBy(
             () ->
                 reconstructor.executeApprovedBatch(
-                    List.of(pendingOp), List.of(), List.of(), new ArrayList<>(), observationContext))
+                    List.of(pendingOp), List.of(), List.of(), new ArrayList<>(), observationContext, List.of()))
         .isInstanceOf(RuntimeException.class)
         .hasMessageContaining("Tool execution failed");
 
     // Then - intent WAS recorded (before delegate threw)
-    assertThat(store.hasInvocationIntent("proc-test", "op-123"))
+    assertThat(store.hasInvocationIntent("proc-test", "op-123", "attempt-test"))
         .as("Intent should be recorded even when delegate fails")
         .isTrue();
 
@@ -258,10 +302,10 @@ class InvocationIntentGateTest {
 
     // When
     reconstructor.executeApprovedBatch(
-        List.of(pendingOp), List.of(), List.of(), new ArrayList<>(), observationContext);
+        List.of(pendingOp), List.of(), List.of(), new ArrayList<>(), observationContext, List.of());
 
     // Then - intent recorded
-    assertThat(store.hasInvocationIntent("proc-test", "op-123"))
+    assertThat(store.hasInvocationIntent("proc-test", "op-123", "attempt-test"))
         .as("Intent should be recorded")
         .isTrue();
 
@@ -285,7 +329,7 @@ class InvocationIntentGateTest {
     InvocationStateStore partiallyFailingStore =
         new InvocationStateStore() {
           @Override
-          public void recordInvocationIntent(String processId, String operationId) {
+          public void recordInvocationIntent(String processId, String operationId, String attemptId) {
             int count = callCount.incrementAndGet();
             if (count == 1) {
               throw new InvocationIntentPersistenceException(
@@ -295,9 +339,30 @@ class InvocationIntentGateTest {
           }
 
           @Override
-          public boolean hasInvocationIntent(String processId, String operationId) {
+          public boolean hasInvocationIntent(String processId, String operationId, String attemptId) {
             // Not used in this test
             return false;
+          }
+
+          @Override
+          public java.util.List<InvocationAttempt> findAttempts(String processId, String operationId) {
+            return java.util.List.of();
+          }
+
+          @Override
+          public void recordResolution(
+              String processId,
+              String operationId,
+              String attemptId,
+              cn.bitcss.arctra.recovery.ResolutionType type,
+              String recoveredResult) {
+            // No-op
+          }
+
+          @Override
+          public java.util.Optional<cn.bitcss.arctra.recovery.OperationResolution> getResolution(
+              String processId, String operationId, String attemptId) {
+            return java.util.Optional.empty();
           }
         };
 
@@ -324,7 +389,7 @@ class InvocationIntentGateTest {
     assertThatThrownBy(
             () ->
                 reconstructor.executeApprovedBatch(
-                    pendingBatch, List.of(), List.of(), new ArrayList<>(), observationContext))
+                    pendingBatch, List.of(), List.of(), new ArrayList<>(), observationContext, List.of()))
         .isInstanceOf(InvocationIntentPersistenceException.class)
         .hasMessageContaining("First operation gate failure");
 
