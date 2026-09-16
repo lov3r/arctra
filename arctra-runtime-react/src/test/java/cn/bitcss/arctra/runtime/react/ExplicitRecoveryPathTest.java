@@ -19,6 +19,15 @@ import cn.bitcss.arctra.recovery.RecoveryUncertaintyException;
 import cn.bitcss.arctra.runtime.DurableExecutionEngine;
 import cn.bitcss.arctra.runtime.RuntimeBinding;
 import cn.bitcss.arctra.runtime.RuntimeBindingResolver;
+import cn.bitcss.arctra.runtime.react.durable.DurableResumeCoordinator;
+import cn.bitcss.arctra.runtime.react.durable.InMemoryInvocationStateStore;
+import cn.bitcss.arctra.runtime.react.durable.InvocationAttempt;
+import cn.bitcss.arctra.runtime.react.durable.InvocationRecoveryClassifier;
+import cn.bitcss.arctra.runtime.react.durable.InvocationStateStore;
+import cn.bitcss.arctra.runtime.react.durable.RecoveryClassificationResult;
+import cn.bitcss.arctra.runtime.react.protocol.ResumedExecutionHandler;
+import cn.bitcss.arctra.runtime.react.protocol.ResumedExecutionOutcome;
+import cn.bitcss.arctra.runtime.react.tool.ToolObservationContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -426,7 +435,7 @@ class ExplicitRecoveryPathTest {
     }
 
     @Override
-    public java.util.List<cn.bitcss.arctra.runtime.react.InvocationAttempt> findAttempts(
+    public java.util.List<cn.bitcss.arctra.runtime.react.durable.InvocationAttempt> findAttempts(
         String processId, String operationId) {
       readCalls.add(processId + ":" + operationId);
       return delegate.findAttempts(processId, operationId);

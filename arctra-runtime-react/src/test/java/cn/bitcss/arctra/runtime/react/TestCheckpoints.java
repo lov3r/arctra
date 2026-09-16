@@ -2,6 +2,7 @@ package cn.bitcss.arctra.runtime.react;
 
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
+import cn.bitcss.arctra.runtime.react.durable.ExecutionIncarnation;
 import java.util.List;
 
 /**

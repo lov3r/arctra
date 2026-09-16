@@ -3,6 +3,7 @@ package cn.bitcss.arctra.runtime.react;
 import cn.bitcss.arctra.checkpoint.CheckpointAlreadyExistsException;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
+import cn.bitcss.arctra.runtime.react.persistence.CheckpointJsonCodec;
 import java.util.Objects;
 import java.util.Optional;
 import javax.sql.DataSource;

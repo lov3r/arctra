@@ -19,6 +19,13 @@ import cn.bitcss.arctra.process.ContinuationSignal;
 import cn.bitcss.arctra.runtime.DefaultAgentRuntime;
 import cn.bitcss.arctra.runtime.RuntimeBinding;
 import cn.bitcss.arctra.runtime.RuntimeBindingResolver;
+import cn.bitcss.arctra.runtime.react.durable.DurableResumeCoordinator;
+import cn.bitcss.arctra.runtime.react.durable.ExecutionIncarnation;
+import cn.bitcss.arctra.runtime.react.durable.InvocationAttempt;
+import cn.bitcss.arctra.runtime.react.durable.InvocationRecoveryClassifier;
+import cn.bitcss.arctra.runtime.react.durable.InvocationStateStore;
+import cn.bitcss.arctra.runtime.react.protocol.ResumedExecutionHandler;
+import cn.bitcss.arctra.runtime.react.protocol.SpringAiResumedExecutionHandler;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -258,7 +265,7 @@ class AutomaticRecoveryModeSelectionTest {
     }
 
     @Override
-    public java.util.List<cn.bitcss.arctra.runtime.react.InvocationAttempt> findAttempts(
+    public java.util.List<cn.bitcss.arctra.runtime.react.durable.InvocationAttempt> findAttempts(
         String processId, String operationId) {
       return java.util.List.of();
     }

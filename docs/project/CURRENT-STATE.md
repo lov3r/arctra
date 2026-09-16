@@ -1,6 +1,40 @@
 # Current State
 
-**Last Updated:** 2026-09-10 (M5-A2 COMPLETE)
+**Last Updated:** 2026-09-16 (M6-T5 COMPLETE + TEST ARCHITECTURE BASELINE)
+
+---
+
+## Current Phase: M6 Durable Recovery Execution Resolution ✅ COMPLETE
+
+**状态：** M6-T5 COMPLETE (2026-09-16)
+
+**目标：** Physical attempt identity + recovery classification + recovered execution
+
+**已完成：**
+- ✅ M6-T5: Durable Recovery Execution Resolution
+  - Physical attempt identity (attemptId)
+  - Per-attempt invocation state tracking
+  - Recovery classification aggregation logic
+  - Mixed physical/recovered execution in single batch
+  - Recovered ToolResponse with original toolCallId preservation
+  - Complete test coverage (207 tests, 0 failures)
+
+**M6-T5 核心语义：**
+- `attemptId`: Unique physical invocation attempt identity (UUID)
+- `operationId`: Logical durable operation identity
+- `toolCallId`: Spring AI / LLM protocol identity
+- Invocation gate: `recordInvocationIntent(processId, operationId, attemptId)` 必须在 `delegate.call()` 前成功
+- Recovery classification: `DEFINITELY_NOT_DISPATCHED` / `MAY_HAVE_INVOKED` / `RESOLVED_EXECUTED` / `RESOLVED_NOT_EXECUTED`
+- Whole-batch preflight: 任何 `MAY_HAVE_INVOKED` 阻止整个 batch 物理执行
+
+**测试架构基线：**
+- 建立 TEST-ARCHITECTURE-BASELINE.md (2026-09-16)
+- Blast radius 监控机制
+- 决策：最小化干预，延期 Test Harness 到真实需求触发
+
+**Closure:** 待编写 `docs/M6-T5-DURABLE-RECOVERY-EXECUTION-RESOLUTION-CLOSURE.md`
+
+**下一步：** 继续 M6 remaining tasks 或 M6 closure
 
 ---
 

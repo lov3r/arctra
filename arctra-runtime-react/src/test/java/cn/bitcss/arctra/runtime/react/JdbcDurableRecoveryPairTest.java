@@ -6,6 +6,7 @@ import cn.bitcss.arctra.checkpoint.CheckpointStore;
 import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
+import cn.bitcss.arctra.runtime.react.durable.JdbcInvocationStateStore;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

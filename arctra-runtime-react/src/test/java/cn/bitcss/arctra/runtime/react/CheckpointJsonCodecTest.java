@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.*;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.evidence.Evidence;
+import cn.bitcss.arctra.runtime.react.persistence.CheckpointJsonCodec;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
