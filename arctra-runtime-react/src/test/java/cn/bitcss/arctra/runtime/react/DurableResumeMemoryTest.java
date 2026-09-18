@@ -7,6 +7,8 @@ import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
+import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.*;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.governance.GovernanceDecision;
 import cn.bitcss.arctra.governance.ToolGovernancePolicy;
@@ -83,9 +85,7 @@ class DurableResumeMemoryTest {
             "test-key");
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "process-1",
+        checkpoint(            "process-1",
             1L,
             "test-key",
             "session-1",
@@ -160,9 +160,7 @@ class DurableResumeMemoryTest {
             "test-key");
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "process-1",
+        checkpoint(            "process-1",
             1L,
             "test-key",
             "session-1",
@@ -240,9 +238,7 @@ class DurableResumeMemoryTest {
 
     // Checkpoint v1 with sessionId = "session-123"
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "process-1",
+        checkpoint(            "process-1",
             1L,
             "test-key",
             "session-123",

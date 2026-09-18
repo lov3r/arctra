@@ -236,6 +236,25 @@ public final class InMemoryInvocationStateStore implements InvocationStateStore 
     return Optional.ofNullable(resolutions.get(key));
   }
 
+  @Override
+  public void deleteInvocationState(String processId, String operationId) {
+    Objects.requireNonNull(processId, "processId cannot be null");
+    Objects.requireNonNull(operationId, "operationId cannot be null");
+
+    if (processId.isBlank()) {
+      throw new IllegalArgumentException("processId cannot be blank");
+    }
+    if (operationId.isBlank()) {
+      throw new IllegalArgumentException("operationId cannot be blank");
+    }
+
+    // Remove all intents and resolutions for this operation
+    intents.keySet().removeIf(key ->
+        key.processId().equals(processId) && key.operationId().equals(operationId));
+    resolutions.keySet().removeIf(key ->
+        key.processId().equals(processId) && key.operationId().equals(operationId));
+  }
+
   /**
    * Clear all state (package-private for testing).
    *

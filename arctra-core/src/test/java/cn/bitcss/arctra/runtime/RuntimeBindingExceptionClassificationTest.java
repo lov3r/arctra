@@ -1,5 +1,6 @@
 package cn.bitcss.arctra.runtime;
 
+import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.checkpoint;
 import static org.assertj.core.api.Assertions.*;
 
 import cn.bitcss.arctra.agent.AgentDefinition;
@@ -8,6 +9,7 @@ import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
 import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.process.AgentProcess;
 import cn.bitcss.arctra.process.ContinuationSignal;
@@ -263,14 +265,15 @@ class RuntimeBindingExceptionClassificationTest {
 
     // Create checkpoint v1
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
-            "1.0",
+        checkpoint(
             "process-1",
             1L,
             "key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new cn.bitcss.arctra.checkpoint.PendingToolCall("test-op-1", "tc-1", "tool", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
 
     store.create(checkpoint);
 

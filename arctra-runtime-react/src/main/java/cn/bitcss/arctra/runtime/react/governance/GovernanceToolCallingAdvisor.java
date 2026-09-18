@@ -1,6 +1,7 @@
 package cn.bitcss.arctra.runtime.react.governance;
 
 import cn.bitcss.arctra.agent.AgentExecutionContext;
+import cn.bitcss.arctra.durability.DurabilityMode;
 import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.governance.GovernanceDecision;
 import cn.bitcss.arctra.governance.ToolGovernancePolicy;
@@ -183,7 +184,17 @@ public class GovernanceToolCallingAdvisor implements CallAdvisor {
       }
 
       // ============================================================
-      // CASE A: ALL ALLOW → delegate to Spring AI ToolCallingManager
+      // M6-T6.4: DURABILITY CHECK
+      // If ALLOW + DURABLE, signal need for durable materialization
+      // ============================================================
+
+      if (executionContext.durability() == DurabilityMode.DURABLE) {
+        // CASE D: ALL ALLOW + DURABLE → signal for durable materialization before execution
+        return handleDurableBatch(currentRequest, assistantMessage, originalContext);
+      }
+
+      // ============================================================
+      // CASE A: ALL ALLOW + EPHEMERAL → delegate to Spring AI ToolCallingManager
       // ============================================================
 
       ToolExecutionResult toolExecutionResult =
@@ -304,10 +315,36 @@ public class GovernanceToolCallingAdvisor implements CallAdvisor {
     SuspensionState state = new SuspensionState(
         currentRequest,
         assistantMessage,  // Contains all ToolCalls
-        new ArrayList<>(Objects.requireNonNull(evidences.get()))
+        new ArrayList<>(Objects.requireNonNull(evidences.get())),
+        cn.bitcss.arctra.checkpoint.ContinuationDisposition.WAITING_FOR_SIGNAL  // M6-T6.4: Approval required
     );
 
     // Throw internal control signal - suspension is Process state, not conversational message
+    throw new ToolApprovalRequiredSignal(state);
+  }
+
+  /**
+   * Handle ALLOW + DURABLE decision: signal need for durable materialization.
+   * NO tools execute before checkpoint materialization.
+   * M6-T6.4 durable execution = checkpoint BEFORE physical invocation.
+   *
+   * <p>Throws {@link ToolApprovalRequiredSignal} with disposition=RUNNABLE to signal
+   * durable materialization requirement to SpringAiToolCallingEngine.
+   */
+  private ChatClientResponse handleDurableBatch(
+      ChatClientRequest currentRequest,
+      AssistantMessage assistantMessage,
+      Map<String, @Nullable Object> originalContext) {
+
+    // Construct suspension state - same structure, different disposition
+    SuspensionState state = new SuspensionState(
+        currentRequest,
+        assistantMessage,  // Contains all ToolCalls for durable materialization
+        new ArrayList<>(Objects.requireNonNull(evidences.get())),
+        cn.bitcss.arctra.checkpoint.ContinuationDisposition.RUNNABLE  // M6-T6.4: Auto-continue after materialization
+    );
+
+    // Throw internal control signal - durable materialization required
     throw new ToolApprovalRequiredSignal(state);
   }
 
@@ -331,10 +368,16 @@ public class GovernanceToolCallingAdvisor implements CallAdvisor {
   }
 
   /**
-   * Suspension state captured when REQUIRE_APPROVAL.
+   * Suspension state captured when governance requires suspension or durable materialization.
    *
    * <p>Represents the entire tool call batch, not individual tools.
    * M4 approval granularity = AssistantMessage ToolCall Batch.
+   *
+   * <p>M6-T6.4: Added disposition to distinguish:
+   * <ul>
+   *   <li>WAITING_FOR_SIGNAL: REQUIRE_APPROVAL - needs external approval
+   *   <li>RUNNABLE: ALLOW + DURABLE - needs durable materialization then auto-continue
+   * </ul>
    *
    * <p>Package-visible for SpringAiToolCallingEngine.
    *
@@ -343,5 +386,6 @@ public class GovernanceToolCallingAdvisor implements CallAdvisor {
   public record SuspensionState(
       ChatClientRequest originalRequest,
       AssistantMessage assistantMessageWithToolCalls,
-      List<Evidence> evidences) {}
+      List<Evidence> evidences,
+      cn.bitcss.arctra.checkpoint.ContinuationDisposition disposition) {}
 }

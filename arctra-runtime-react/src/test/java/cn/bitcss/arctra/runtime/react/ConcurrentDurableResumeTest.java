@@ -10,6 +10,8 @@ import cn.bitcss.arctra.checkpoint.CheckpointStore;
 import cn.bitcss.arctra.checkpoint.CheckpointTransitionConflictException;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.checkpoint.StaleCheckpointException;
+import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.*;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.governance.GovernanceDecision;
 import cn.bitcss.arctra.governance.ToolGovernancePolicy;
@@ -207,9 +209,7 @@ class ConcurrentDurableResumeTest {
 
     // Pre-create checkpoint v1 with pending toolX
     SuspensionCheckpoint cp1 =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "P100",
+        checkpoint(            "P100",
             1L,
             BINDING_KEY,
             SESSION_ID,
@@ -327,9 +327,7 @@ class ConcurrentDurableResumeTest {
 
     // Pre-create checkpoint v1 with pending toolX
     SuspensionCheckpoint cp1 =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "P100",
+        checkpoint(            "P100",
             1L,
             BINDING_KEY,
             SESSION_ID,
@@ -418,9 +416,7 @@ class ConcurrentDurableResumeTest {
 
     // Initial checkpoint v1
     SuspensionCheckpoint cp1 =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "P100",
+        checkpoint(            "P100",
             1L,
             BINDING_KEY,
             SESSION_ID,

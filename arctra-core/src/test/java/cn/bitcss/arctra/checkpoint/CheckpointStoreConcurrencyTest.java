@@ -1,5 +1,6 @@
 package cn.bitcss.arctra.checkpoint;
 
+import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.checkpoint;
 import static org.assertj.core.api.Assertions.*;
 
 import java.util.ArrayList;
@@ -32,36 +33,39 @@ class CheckpointStoreConcurrencyTest {
 
     // Create initial checkpoint v1
     SuspensionCheckpoint initial =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+        checkpoint(
             "P100",
             1L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-init", "tc-init", "toolInit", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
     store.create(initial);
 
     // Two replacement candidates (both targeting v1 → v2)
     SuspensionCheckpoint replacement1 =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+        checkpoint(
             "P100",
             2L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
 
     SuspensionCheckpoint replacement2 =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+        checkpoint(
             "P100",
             2L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-2", "tc-2", "toolB", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
 
     // Concurrent execution
     CyclicBarrier barrier = new CyclicBarrier(2);
@@ -133,12 +137,12 @@ class CheckpointStoreConcurrencyTest {
 
     // Create initial checkpoint v1
     SuspensionCheckpoint initial =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+        checkpoint(
             "P100",
             1L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-init", "tc-init", "toolInit", "{}")),
             List.of(), "test-epoch");
     store.create(initial);
@@ -188,35 +192,35 @@ class CheckpointStoreConcurrencyTest {
 
     // Create initial checkpoint v1
     SuspensionCheckpoint cp1 =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+        checkpoint(
             "P100",
             1L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-init", "tc-init", "toolInit", "{}")),
             List.of(), "test-epoch");
     store.create(cp1);
 
     // One thread advances v1 → v2
     SuspensionCheckpoint cp2 =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+        checkpoint(
             "P100",
             2L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-replaced", "tc-2", "toolA", "{}")),
             List.of(), "test-epoch");
 
     // Another thread tries stale v1 → v2 (same expected v1)
     SuspensionCheckpoint cp2_stale =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+        checkpoint(
             "P100",
             2L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-stale", "stale", "stale", "{}")),
             List.of(), "test-epoch");
 

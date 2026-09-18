@@ -9,6 +9,8 @@ import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
+import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.*;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import java.util.Optional;
 import cn.bitcss.arctra.evidence.Evidence;
@@ -58,9 +60,7 @@ class ExplicitRecoveryPathTest {
     PendingToolCall opB = new PendingToolCall("op-B", "tc-B", "tool-B", "{}");
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "proc-test",
+        checkpoint(            "proc-test",
             1L,
             "binding-test",
             "session-test",
@@ -132,9 +132,7 @@ class ExplicitRecoveryPathTest {
     PendingToolCall opB = new PendingToolCall("op-B", "tc-B", "tool-B", "{}");
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "proc-test",
+        checkpoint(            "proc-test",
             1L,
             "binding-test",
             "session-test",
@@ -200,9 +198,7 @@ class ExplicitRecoveryPathTest {
     PendingToolCall opB = new PendingToolCall("op-B", "tc-B", "tool-B", "{}");
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "proc-test",
+        checkpoint(            "proc-test",
             1L,
             "binding-test",
             "session-test",
@@ -293,9 +289,7 @@ class ExplicitRecoveryPathTest {
     PendingToolCall opA = new PendingToolCall("op-A", "tc-A", "tool-A", "{}");
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "proc-test",
+        checkpoint(            "proc-test",
             1L,
             "binding-test",
             "session-test",
@@ -362,9 +356,7 @@ class ExplicitRecoveryPathTest {
     PendingToolCall opA = new PendingToolCall("op-A", "tc-A", "tool-A", "{}");
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "proc-test",
+        checkpoint(            "proc-test",
             1L,
             "binding-test",
             "session-test",

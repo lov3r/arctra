@@ -7,6 +7,8 @@ import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
+import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.*;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.governance.GovernanceDecision;
@@ -81,9 +83,7 @@ class DurableResumeEvidenceTest {
     // Create checkpoint with historical Evidence A
     Evidence evidenceA = new Evidence("test:source", "Evidence A content");
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "process-1",
+        checkpoint(            "process-1",
             1L,
             "test-key",
             "session-1",
@@ -159,9 +159,7 @@ class DurableResumeEvidenceTest {
     // Checkpoint with historical Evidence A
     Evidence evidenceA = new Evidence("test:source", "Evidence A");
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
-            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-            "process-1",
+        checkpoint(            "process-1",
             1L,
             "test-key",
             "session-1",

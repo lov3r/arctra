@@ -243,4 +243,23 @@ public interface InvocationStateStore {
    */
   Optional<OperationResolution> getResolution(
       String processId, String operationId, String attemptId);
+
+  /**
+   * Delete all invocation state for a logical operation.
+   *
+   * <p><strong>M6-T6.4 Phase 9: Best-effort cleanup.</strong>
+   *
+   * <p>Removes all physical attempts and resolutions for the specified logical operation.
+   * This is best-effort cleanup after successful checkpoint deletion.
+   *
+   * <p>If deletion fails, stale state remains but does not affect correctness
+   * (checkpoint is the authority).
+   *
+   * @param processId stable process identifier (non-null, non-blank)
+   * @param operationId logical operation identity (non-null, non-blank)
+   * @throws NullPointerException if any parameter is null
+   * @throws IllegalArgumentException if any parameter is blank
+   * @since M6-T6.4
+   */
+  void deleteInvocationState(String processId, String operationId);
 }

@@ -1,5 +1,6 @@
 package cn.bitcss.arctra.runtime.react.persistence;
 
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.evidence.Evidence;
@@ -156,12 +157,20 @@ public final class CheckpointJsonCodec {
           ? root.path("executionEpoch").asText()
           : null;
 
+      // M6-T6.4: disposition (v1.2, nullable for v1.0/v1.1 compatibility)
+      ContinuationDisposition disposition = null;
+      if (root.has("disposition") && !root.path("disposition").isNull()) {
+        String dispositionStr = root.path("disposition").asText();
+        disposition = ContinuationDisposition.valueOf(dispositionStr);
+      }
+
       return new SuspensionCheckpoint(
           schemaVersion,
           processId,
           checkpointVersion,
           runtimeBindingKey,
           sessionId,
+          disposition, // M6-T6.4: nullable for legacy compatibility
           pendingBatch,
           accumulatedEvidences,
           executionEpoch);

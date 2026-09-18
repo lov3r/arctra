@@ -67,7 +67,7 @@ public final class InvocationRecoveryClassifier {
    * @return classification result
    * @throws RuntimeException if invocation-state read fails (fail closed)
    */
-  RecoveryClassificationResult classify(String processId, PendingToolCall operation) {
+  public RecoveryClassificationResult classify(String processId, PendingToolCall operation) {
     Objects.requireNonNull(processId, "processId cannot be null");
     Objects.requireNonNull(operation, "operation cannot be null");
 

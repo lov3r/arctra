@@ -10,6 +10,8 @@ import cn.bitcss.arctra.checkpoint.CheckpointStore;
 import cn.bitcss.arctra.checkpoint.CheckpointTransitionConflictException;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.checkpoint.StaleCheckpointException;
+import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.*;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.governance.GovernanceDecision;
 import cn.bitcss.arctra.governance.ToolGovernancePolicy;
@@ -389,9 +391,7 @@ class DurableResumeExecutionTest {
 
   private SuspensionCheckpoint createCheckpoint(
       String processId, long version, String bindingKey, String sessionId) {
-    return new SuspensionCheckpoint(
-        SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
-        processId,
+    return checkpoint(        processId,
         version,
         bindingKey,
         sessionId,

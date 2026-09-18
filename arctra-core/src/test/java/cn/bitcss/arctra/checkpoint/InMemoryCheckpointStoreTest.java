@@ -2,6 +2,7 @@ package cn.bitcss.arctra.checkpoint;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -149,12 +150,14 @@ class InMemoryCheckpointStoreTest {
   // Helper method
   private SuspensionCheckpoint createCheckpoint(String processId, long version) {
     return new SuspensionCheckpoint(
-        "1.0",
+        SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
         processId,
         version,
         "test-binding-key",
         "session-123",
+        ContinuationDisposition.WAITING_FOR_SIGNAL,
         List.of(new PendingToolCall("test-op-X", "tc-1", "testTool", "{}")),
-        List.of(), "test-epoch");
+        List.of(),
+        "test-epoch");
   }
 }

@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.*;
 
 import cn.bitcss.arctra.checkpoint.CheckpointAlreadyExistsException;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
+import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.*;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.evidence.Evidence;
 import java.util.List;
@@ -59,7 +61,7 @@ class JdbcCheckpointStoreTest {
   @DisplayName("Create and load checkpoint")
   void createAndLoad() {
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-123",
             1L,
@@ -89,7 +91,7 @@ class JdbcCheckpointStoreTest {
   @DisplayName("Create duplicate processId throws CheckpointAlreadyExistsException")
   void createDuplicateProcessId() {
     SuspensionCheckpoint checkpoint1 =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-dup",
             1L,
@@ -101,7 +103,7 @@ class JdbcCheckpointStoreTest {
     store.create(checkpoint1);
 
     SuspensionCheckpoint checkpoint2 =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-dup", // same processId
             2L, // different version
@@ -119,7 +121,7 @@ class JdbcCheckpointStoreTest {
   @DisplayName("Preserve nullable sessionId")
   void nullableSessionId() {
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-null-session",
             1L,
@@ -143,7 +145,7 @@ class JdbcCheckpointStoreTest {
     JdbcCheckpointStore storeA = new JdbcCheckpointStore(database);
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-restart",
             1L,
@@ -170,7 +172,7 @@ class JdbcCheckpointStoreTest {
   @DisplayName("replaceIfVersion with matching version succeeds")
   void replaceIfVersionSuccess() {
     SuspensionCheckpoint v1 =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-replace",
             1L,
@@ -182,7 +184,7 @@ class JdbcCheckpointStoreTest {
     store.create(v1);
 
     SuspensionCheckpoint v2 =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-replace",
             2L, // incremented version
@@ -204,7 +206,7 @@ class JdbcCheckpointStoreTest {
   @DisplayName("replaceIfVersion with stale version fails")
   void replaceIfVersionStale() {
     SuspensionCheckpoint v1 =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-stale",
             1L,
@@ -216,7 +218,7 @@ class JdbcCheckpointStoreTest {
     store.create(v1);
 
     SuspensionCheckpoint v2 =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-stale",
             2L,
@@ -230,7 +232,7 @@ class JdbcCheckpointStoreTest {
 
     // Attempt stale replace (v1 → v3)
     SuspensionCheckpoint v3 =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-stale",
             3L,
@@ -253,7 +255,7 @@ class JdbcCheckpointStoreTest {
   @DisplayName("deleteIfVersion with matching version succeeds")
   void deleteIfVersionSuccess() {
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-delete",
             1L,
@@ -276,7 +278,7 @@ class JdbcCheckpointStoreTest {
   @DisplayName("deleteIfVersion with stale version fails")
   void deleteIfVersionStale() {
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-delete-stale",
             2L, // version 2
@@ -301,7 +303,7 @@ class JdbcCheckpointStoreTest {
   @DisplayName("Concurrent replaceIfVersion: exactly one succeeds")
   void concurrentReplaceExactlyOneSucceeds() throws Exception {
     SuspensionCheckpoint v1 =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-concurrent",
             1L,
@@ -317,7 +319,7 @@ class JdbcCheckpointStoreTest {
     JdbcCheckpointStore storeB = new JdbcCheckpointStore(database);
 
     SuspensionCheckpoint v2 =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-concurrent",
             2L,
@@ -327,7 +329,7 @@ class JdbcCheckpointStoreTest {
             List.<Evidence>of(), "test-epoch-001");
 
     SuspensionCheckpoint v3 =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-concurrent",
             3L,
@@ -402,7 +404,7 @@ class JdbcCheckpointStoreTest {
     String operationId = "op-uuid-exact-12345";
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-opid",
             1L,
@@ -430,7 +432,7 @@ class JdbcCheckpointStoreTest {
             new PendingToolCall("op-3", "tc-3", "tool-c", "{}"));
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint("1.0", "proc-multi-op", 1L, "key", "session", pending, List.<Evidence>of(), "test-epoch-001");
+        checkpoint("1.0", "proc-multi-op", 1L, "key", "session", pending, List.<Evidence>of(), "test-epoch-001");
 
     store.create(checkpoint);
 
@@ -447,7 +449,7 @@ class JdbcCheckpointStoreTest {
     JdbcCheckpointStore storeB = new JdbcCheckpointStore(database);
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-cross",
             1L,

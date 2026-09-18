@@ -116,6 +116,20 @@ public enum EventType {
   SUSPENDED,
 
   /**
+   * Durable checkpoint materialized (M6-T6.4).
+   *
+   * <p><strong>Precise semantics:</strong> RUNNABLE checkpoint has been successfully created.
+   * Logical operations (operationIds) are now durable and reachable. Physical tool execution
+   * will follow (either immediately via internal auto-continue, or after manual resume).
+   *
+   * <p><strong>Domain commit point:</strong> checkpointStore.create() succeeded. The RUNNABLE
+   * checkpoint exists durably before any physical side effects.
+   *
+   * @since M6-T6.4
+   */
+  MATERIALIZED,
+
+  /**
    * Process resumed from checkpoint.
    *
    * <p><strong>Domain commit point:</strong> The durable continuation environment has been

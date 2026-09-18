@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.examples.incident.tools.GetDeploymentTool;
 import cn.bitcss.arctra.examples.incident.tools.QueryLogsTool;
-import cn.bitcss.arctra.runtime.react.EvidenceCapturingToolCallback;
+import cn.bitcss.arctra.runtime.react.tool.EvidenceCapturingToolCallback;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;

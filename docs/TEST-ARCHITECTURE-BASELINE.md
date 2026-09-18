@@ -1,290 +1,330 @@
 # TEST ARCHITECTURE BASELINE
 
-**记录时间**: 2026-09-16  
-**关联**: M6-T5 完成后  
-**状态**: 所有测试通过 (207 tests, 0 failures, 13 skipped)
+**建立时间**: 2026-09-16  
+**模块**: arctra-runtime-react  
+**状态**: V1 Freeze  
+**测试状态**: ✅ 207 pass, 0 failures, 13 skipped
 
 ---
 
 ## 目的
 
-本文档记录 Arctra V1 测试架构的 **blast radius baseline**，用于：
+本文档记录 Arctra **TEST ARCHITECTURE BASELINE**，用于监控 Production API 演进对测试的 blast radius 影响。
 
-1. 监控未来 production API 演进对测试的影响范围
-2. 触发 Test Architecture Stabilization 的决策依据
-3. Architecture Fitness Rules 的参考基准
+当 Production API 变化导致指标超过阈值时，触发完整 **TEST ARCHITECTURE STABILIZATION**。
 
 ---
 
-## Blast Radius 基线指标
+## Blast Radius 指标
 
-### 构造函数调用点统计
+### 1. 构造函数调用点
 
-| 组件 | 测试构造调用次数 | 构造函数参数数量 | 风险等级 | 监控阈值 |
-|------|-----------------|-----------------|---------|---------|
-| SpringAiToolCallingEngine | 84 | 4/7/8 (多重载) | CRITICAL | 100 |
-| DefaultAgentRuntime | 34 | 1 | HIGH | 50 |
-| DurableResumeCoordinator | 16 | (待确认) | MEDIUM | 30 |
+| 组件 | 测试调用点 | 参数数 | 风险等级 | 阈值 |
+|------|-----------|--------|----------|------|
+| **SpringAiToolCallingEngine** | **84** | 8 | 🔴 CRITICAL | > 100 或增加第 9 参数 |
+| **DefaultAgentRuntime** | **34** | 1 | 🟡 HIGH | > 50 或增加第 2 参数 |
+| **DurableResumeCoordinator** | **16** | 4 | 🟢 MEDIUM | > 30 |
 
-### 方法调用点统计
+**当前最高风险**: SpringAiToolCallingEngine（84 调用点，8 参数）
 
-| 方法 | 调用次数 | 参数数量 | 演进风险 | 状态 |
-|------|---------|---------|---------|------|
-| recordInvocationIntent | 58 | 3 | LOW | 已稳定 |
-| ProtocolReconstructor.executeApprovedBatch | 9 | 6 | MEDIUM | 监控中 |
-
-### 匿名实现统计
-
-| Interface | 匿名实现数量 | 评估 |
-|-----------|-------------|------|
-| DurableExecutionEngine | 1 | 不需要 Shared Stub |
-| ResumedExecutionHandler | 1 | 不需要 Shared Stub |
-
----
-
-## SpringAiToolCallingEngine 详细分析
-
-### 当前构造函数签名
+#### SpringAiToolCallingEngine 构造函数
 
 ```java
-// 权威构造函数 (M5-T4)
 public SpringAiToolCallingEngine(
-    ChatModel chatModel,
-    List<ToolCallback> tools,
-    ChatMemory chatMemory,
-    ToolGovernancePolicy governancePolicy,
+    ChatModel chatModel,                    // 1
+    List<ToolCallback> tools,               // 2
+    ChatMemory chatMemory,                  // 3
+    ToolGovernancePolicy governancePolicy,  // 4
+    CheckpointStore checkpointStore,        // 5
+    RuntimeBindingResolver bindingResolver, // 6
+    String runtimeBindingKey,               // 7
+    ExecutionLedger executionLedger)        // 8 (M6 新增)
+```
+
+**典型测试模式**:
+```java
+// 大量测试传递 null 给不关心的依赖
+new SpringAiToolCallingEngine(
+    chatModel,
+    tools,
+    chatMemory,
+    policy,
+    null,  // checkpointStore
+    null,  // bindingResolver
+    null,  // runtimeBindingKey
+    null   // executionLedger
+)
+```
+
+**风险**: 下次增加参数（如 RecoveryCoordinator）→ **84 个测试同时 compile failure**
+
+#### DefaultAgentRuntime 构造函数
+
+```java
+public DefaultAgentRuntime(
+    AgentExecutionEngine engine)  // 1
+```
+
+**风险**: 虽然仅 1 参数，但 34 调用点，如果增加 policy/ledger/observer → 34 个测试修改
+
+#### DurableResumeCoordinator 构造函数
+
+```java
+public DurableResumeCoordinator(
     CheckpointStore checkpointStore,
-    RuntimeBindingResolver bindingResolver,
-    String runtimeBindingKey,
-    ExecutionLedger executionLedger)  // 8 parameters
+    RuntimeBindingResolver runtimeBindingResolver,
+    ResumedExecutionHandler resumedExecutionHandler,
+    InvocationStateStore invocationStateStore)
 ```
 
-### 演进历史
-
-- **M5-T4**: 增加 durable suspension (checkpointStore, bindingResolver, runtimeBindingKey)
-- **M5-T4**: 增加 executionLedger
-- **M6-T2B.1**: 内部使用 ExecutionEventListener (通过 ExecutionLedger)
-- **M6-T4E**: 内部创建 InvocationStateStore
-- **M6-T4C**: 内部创建 InvocationRecoveryClassifier
-- **M6-T2.5A-R3/R4**: 内部创建 SpringAiResumedExecutionHandler 和 DurableResumeCoordinator
-
-### 风险评估
-
-**CRITICAL** - 84 个测试调用点
-
-**潜在演进方向**:
-- Recovery policy 配置
-- 更多 governance 选项
-- 分布式协调依赖
-- 性能监控组件
-
-**触发 Test Harness 条件**:
-- 构造函数增加第 9 个参数
-- 或测试调用点超过 100
+**当前风险**: 低（16 调用点，4 参数相对稳定）
 
 ---
 
-## DefaultAgentRuntime 详细分析
+### 2. 方法参数列表
 
-### 当前构造函数签名
+| 方法 | 调用点 | 参数数 | 可见性 | 风险等级 | 阈值 |
+|------|--------|--------|--------|----------|------|
+| **recordInvocationIntent** | **58** | 3 | public | 🟢 LOW | >= 5 参数 |
+| **executeApprovedBatch** | **9** | 6 | private | 🟡 MEDIUM | >= 7 参数 |
+
+#### recordInvocationIntent
 
 ```java
-public DefaultAgentRuntime(AgentExecutionEngine engine)  // 1 parameter
+recordInvocationIntent(
+    String processId,
+    String operationId,
+    String attemptId)
 ```
 
-### 风险评估
+- **调用点**: 58 (production ~15, test ~43)
+- **最近演进**: M6-T5 新增 attemptId
+- **语义稳定性**: ✅ 高（三者共同表达 physical invocation identity）
+- **未来演进可能**: ❌ 低
+- **推荐**: 保持监控，无需 Parameter Object
 
-**HIGH** - 34 个测试调用点
-
-虽然当前只有 1 个参数，但作为核心 runtime，未来可能增加：
-- ProcessFactory
-- 全局 ExecutionLedger
-- RuntimeConfiguration
-- 分布式相关依赖
-
-**触发 Test Harness 条件**:
-- 构造函数增加参数
-- 或测试调用点超过 50
-
----
-
-## ProtocolReconstructor.executeApprovedBatch 详细分析
-
-### 当前方法签名
+#### executeApprovedBatchInternal (private)
 
 ```java
-List<Message> executeApprovedBatch(
+executeApprovedBatchInternal(
     List<PendingToolCall> pendingBatch,
     List<Message> conversationHistory,
     List<Evidence> checkpointEvidences,
     List<Evidence> newEvidences,
     ToolObservationContext baseObservationContext,
-    List<RecoveryClassificationResult> classifications)  // 6 parameters
+    List<RecoveryClassificationResult> classifications)
 ```
 
-### 演进历史
-
-- **M6-T5**: 新增 `classifications` 参数
-
-### 风险评估
-
-**MEDIUM-LOW** - 9 个调用点，但 6 个参数已处于临界点
-
-**参数语义分组**:
-- Input: `pendingBatch`, `conversationHistory`, `checkpointEvidences`, `newEvidences`
-- Metadata: `baseObservationContext`, `classifications`
-
-**触发 Parameter Object 条件**:
-- 增加第 7 个参数
-- 或参数继续演进（如 recovery execution plan）
+- **调用点**: 9 (全部 test)
+- **可见性**: private
+- **最近演进**: M6-T5 新增 classifications
+- **未来演进可能**: ⚠️ 中等（durable execution 可能携带更多元数据）
+- **推荐**: ⚠️ 监控临界点（6 参数），如增加到 7 参数考虑 Parameter Object
 
 ---
 
-## recordInvocationIntent 详细分析
+### 3. 匿名实现
 
-### 当前方法签名
+| Interface | 匿名实现数 | 位置 | 风险等级 | 阈值 |
+|-----------|-----------|------|----------|------|
+| **DurableExecutionEngine** | 1 | ExplicitRecoveryPathTest | 🟢 LOW | > 5 |
+| **ResumedExecutionHandler** | 1 | ExplicitRecoveryPathTest | 🟢 LOW | > 5 |
+| AgentExecutionEngine | 0 | - | 🟢 NONE | > 5 |
+| InvocationStateStore | 0 | - | 🟢 NONE | > 5 |
+| CheckpointStore | 0 | - | 🟢 NONE | > 5 |
 
-```java
-void recordInvocationIntent(
-    String processId,
-    String operationId,
-    String attemptId)  // 3 parameters
-```
-
-### 演进历史
-
-- **M6-T5**: 从 2 参数演进到 3 参数（新增 attemptId）
-- 刚刚完成大规模迁移
-
-### 风险评估
-
-**LOW (已稳定)** - 58 个调用点，但不需要 Parameter Object
-
-**理由**:
-- 3 个参数语义清晰且独立
-- 每个参数都是不可合并的身份标识
-- 不太可能继续演进（已经是物理 attempt identity）
-
----
-
-## 稳定化决策
-
-### 方案选择: **方案 A - 最小化干预**
-
-**理由**:
-1. 当前所有测试编译通过、运行通过
-2. M6-T5 刚刚完成一轮大规模迁移
-3. 架构处于 V1 freeze 阶段
-4. 符合架构宪法："不为'以后可能用到'提前创建抽象"
-
-### 立即行动
-
-- [x] 完成 Source Audit
-- [x] 保存本 Baseline 文档
-- [ ] (可选) 添加 Architecture Fitness Rule
-
-### 延期到真实需求触发
-
-以下稳定化措施**不在当前执行**，等待真实变化触发：
-
-- SpringAiToolCallingEngine Test Harness
-- DefaultAgentRuntime Test Harness
-- Parameter Objects (如 ApprovedBatchExecutionRequest)
-- Test Builders
-- Shared Test Doubles
+**当前状态**: ✅ **极低，不构成 blast radius**
 
 ---
 
 ## 触发条件
 
-**当以下任一情况发生时，立即执行 Test Architecture Stabilization**:
+### 🔴 强制触发（必须执行完整 Stabilization）
 
-### 关键触发器
+以下任一条件满足，**必须**执行完整 **TEST ARCHITECTURE STABILIZATION TRACK**：
 
-1. **SpringAiToolCallingEngine 构造函数变化**
-   - 增加第 9 个参数
-   - 或测试调用点 > 100
+1. **SpringAiToolCallingEngine**
+   - 构造函数增加第 9 个参数
+   - OR 测试调用点 > 100
 
-2. **DefaultAgentRuntime 构造函数变化**
-   - 增加第 2 个参数
-   - 或测试调用点 > 50
+2. **DefaultAgentRuntime**
+   - 构造函数增加第 2 个参数
+   - OR 测试调用点 > 50
 
-3. **ProtocolReconstructor.executeApprovedBatch 演进**
-   - 增加第 7 个参数
-   - 或调用点 > 15
+3. **任何方法参数数量 >= 7**
 
-4. **任何方法参数数量 >= 7**
-   - 触发 Parameter Object 评估
+4. **单次 API 变化导致 > 50 个测试 compile failure**
 
-### 次要触发器
+### 🟡 次要触发（评估是否执行）
 
-5. 匿名实现数量 > 5（同一 interface）
-6. 重复构造模式 > 20（同一组件）
-7. Production API 变化导致 > 50 个测试编译失败
+5. **同一 interface 匿名实现 > 5**
+6. **同一组件重复构造 > 20**（DurableResumeCoordinator 接近）
+7. **DX 明显恶化**（开发者反馈测试修改困难）
 
 ---
 
-## 架构宪法对照
+## 监控流程
 
-根据 **CLAUDE.md 第十三条: V1 最终工程原则**
-
-> "架构进入 Freeze-by-default 状态：除非真实代码、测试或 Vertical Slice 暴露问题，否则不继续扩展架构。"
->
-> "不为'以后可能用到'提前创建模块、抽象、依赖或公共 API。"
-
-**当前决策符合宪法原则**:
-- ✅ 当前没有"真实代码、测试暴露的问题"
-- ✅ 所有测试通过
-- ✅ 不主动创建测试基础设施
-- ✅ 记录 baseline 和触发条件
-- ✅ 等待真实变化再响应
-
----
-
-## 监控检查清单
-
-### 每次 Production API 变化后检查
+### 每次 Production API 修改后检查
 
 ```bash
-# 1. 检查构造函数调用点
-grep -r "new SpringAiToolCallingEngine(" src/test --include="*.java" | wc -l
-grep -r "new DefaultAgentRuntime(" src/test --include="*.java" | wc -l
+#!/bin/bash
+# Blast Radius Check Script
 
-# 2. 检查方法参数数量（手动检查最新签名）
-# 如果任何方法 >= 7 参数，触发评估
+cd arctra-runtime-react
 
-# 3. 检查测试编译状态
-./mvnw test-compile
+echo "=== TEST ARCHITECTURE BLAST RADIUS CHECK ==="
+echo ""
 
-# 4. 检查测试运行状态
-./mvnw verify
+echo "1. 构造函数调用点:"
+echo "  SpringAiToolCallingEngine: $(grep -r 'new SpringAiToolCallingEngine(' src/test --include='*.java' | wc -l) (baseline: 84, threshold: 100)"
+echo "  DefaultAgentRuntime: $(grep -r 'new DefaultAgentRuntime(' src/test --include='*.java' | wc -l) (baseline: 34, threshold: 50)"
+echo "  DurableResumeCoordinator: $(grep -r 'new DurableResumeCoordinator(' src/test --include='*.java' | wc -l) (baseline: 16, threshold: 30)"
+echo ""
+
+echo "2. 方法调用点:"
+echo "  recordInvocationIntent: $(grep -r 'recordInvocationIntent(' src/test --include='*.java' | wc -l) (baseline: 58)"
+echo "  executeApprovedBatch: $(grep -r 'executeApprovedBatch' src/test --include='*.java' | wc -l) (baseline: 9)"
+echo ""
+
+echo "3. 匿名实现:"
+echo "  DurableExecutionEngine: $(grep -r 'new DurableExecutionEngine()' src/test --include='*.java' | wc -l) (baseline: 1, threshold: 5)"
+echo "  ResumedExecutionHandler: $(grep -r 'new ResumedExecutionHandler()' src/test --include='*.java' | wc -l) (baseline: 1, threshold: 5)"
+echo ""
+
+cd ..
+echo "4. 运行测试:"
+./mvnw clean verify -q
+
+echo ""
+echo "5. 对照 baseline: docs/TEST-ARCHITECTURE-BASELINE.md"
+echo "6. 触发条件: docs/TEST-ARCHITECTURE-BASELINE.md#触发条件"
 ```
 
-### 对照 Baseline
+### 检查清单
 
-将新的指标与本文档中的基线对比：
-
-- 构造调用增长 > 20% → 评估影响
-- 方法参数增加 → 评估 Parameter Object
-- 匿名实现增长 > 3 → 评估 Shared Stub
-
----
-
-## 相关文档
-
-- `CLAUDE.md` - 架构宪法
-- `docs/ARCHITECTURE-V7.md` - 架构文档
-- `docs/M6-T5-*.md` - M6-T5 相关文档
-- `ARCTRA-TEST-ARCHITECTURE-STABILIZATION-TRACK.md` - 完整稳定化指南
+- [ ] 构造调用点是否超过阈值？
+- [ ] 方法参数是否 >= 7？
+- [ ] 匿名实现是否 > 5？
+- [ ] 测试 compile failures 是否 > 50？
+- [ ] 是否触发强制条件？
+- [ ] 如果是，执行 **ARCTRA-TEST-ARCHITECTURE-STABILIZATION-TRACK**
 
 ---
 
-## 审计历史
+## 组件详细分析
 
-| 日期 | 事件 | Blast Radius 变化 |
-|------|------|------------------|
-| 2026-09-16 | 建立 Baseline (M6-T5 完成后) | - |
+### SpringAiToolCallingEngine (🔴 CRITICAL)
+
+**当前状态**:
+- 调用点: **84** 🔴
+- 参数: 8
+- Null-heavy 模式: ✅ 大量存在
+
+**历史演进**:
+- M1: 初始实现（4 参数）
+- M2: 增加 ChatMemory
+- M5: 增加 CheckpointStore, RuntimeBindingResolver, runtimeBindingKey
+- M6: 增加 ExecutionLedger
+
+**未来可能增加**:
+- RecoveryCoordinator（M6+）
+- PolicyEngine
+- ObservabilityContext
+- Budget/Timeout Context
+
+**当前无 Harness 的影响**:
+- ✅ 每次参数增加 → **84 个测试同时修改**
+- ✅ 大量 null 传递 → 测试意图不清晰
+- ✅ 构造复杂度高 → 测试设置困难
+
+**推荐解决方案**（触发后）:
+```java
+// 替代当前的 84 个直接构造
+SpringAiToolCallingEngineTestHarness harness =
+    SpringAiToolCallingEngineTestHarness.builder()
+        .chatModel(chatModel)
+        .tools(tools)
+        .build();  // 其他使用 safe defaults
+
+SpringAiToolCallingEngine engine = harness.engine();
+```
 
 ---
 
-**维护策略**: 本文档应在每次重大 Production API 变化后更新。
+### DefaultAgentRuntime (🟡 HIGH)
+
+**当前状态**:
+- 调用点: **34** 🟡
+- 参数: 1
+
+**简单但调用点多**:
+- 虽然只有 1 参数，但 34 调用点
+- 如果增加 policy/ledger/observer → 34 个测试修改
+
+**未来可能增加**:
+- ExecutionPolicy
+- ExecutionLedger
+- RuntimeObserver
+- Budget/Timeout
+
+**当前可接受理由**:
+- ✅ 仅 1 参数，修改成本相对低
+- ✅ 无明确演进计划
+- ⚠️ 但 34 调用点接近监控阈值
+
+---
+
+### DurableResumeCoordinator (🟢 MEDIUM)
+
+**当前状态**:
+- 调用点: **16** 🟢
+- 参数: 4
+
+**相对稳定**:
+- ✅ 调用点少（16）
+- ✅ 4 参数相对合理
+- ✅ M6 后趋于稳定
+
+**未来可能增加**:
+- Recovery Control Plane 依赖
+- Policy/Governance
+
+**当前评估**: 风险低，继续监控即可
+
+---
+
+## 历史记录
+
+| 日期 | SpringAiToolCallingEngine | DefaultAgentRuntime | DurableResumeCoordinator | 备注 |
+|------|--------------------------|--------------------|-----------------------|------|
+| 2026-09-16 | 84 调用点 (8 参数) | 34 调用点 (1 参数) | 16 调用点 (4 参数) | Baseline 建立 |
+
+**未来**: 每次 Production API 变化后更新此表
+
+---
+
+## 决策参考
+
+详见：[TEST-ARCHITECTURE-STABILIZATION-DECISION.md](./TEST-ARCHITECTURE-STABILIZATION-DECISION.md)
+
+**当前决策**: 方案 A - 最小化干预（监控 + Baseline）
+
+**执行指南**: [ARCTRA-TEST-ARCHITECTURE-STABILIZATION-TRACK](../ARCTRA-TEST-ARCHITECTURE-STABILIZATION-TRACK.md)
+
+---
+
+## 附录：快速命令
+
+```bash
+# 快速检查 blast radius
+cd arctra-runtime-react && \
+  echo "SpringAiToolCallingEngine: $(grep -r 'new SpringAiToolCallingEngine(' src/test --include='*.java' | wc -l)" && \
+  echo "DefaultAgentRuntime: $(grep -r 'new DefaultAgentRuntime(' src/test --include='*.java' | wc -l)"
+
+# 查看典型构造模式
+grep -A 10 "new SpringAiToolCallingEngine(" src/test/java -r | head -30
+
+# 运行测试
+cd .. && ./mvnw clean verify
+```

@@ -1,40 +1,103 @@
 # Current State
 
-**Last Updated:** 2026-09-16 (M6-T5 COMPLETE + TEST ARCHITECTURE BASELINE)
+**Last Updated:** 2026-09-16 (M6-T6.1 ADVERSARIAL VALIDATION COMPLETE)
 
 ---
 
-## Current Phase: M6 Durable Recovery Execution Resolution ✅ COMPLETE
+## Current Phase: M6 Durable Recovery 🚧 ARCHITECTURE GATE
 
-**状态：** M6-T5 COMPLETE (2026-09-16)
+**状态：** M6-T6.3 ARCHITECTURE GATE (2026-09-16)
 
-**目标：** Physical attempt identity + recovery classification + recovered execution
-
-**已完成：**
+**M6 所有任务完成：**
+- ✅ M6-T1: ExecutionLedger Foundation
+- ✅ M6-T2: Event Dispatch
+- ✅ M6-T3: Durable Tool Operation Identity
+- ✅ M6-T4: Invocation Intent Foundation
 - ✅ M6-T5: Durable Recovery Execution Resolution
-  - Physical attempt identity (attemptId)
-  - Per-attempt invocation state tracking
-  - Recovery classification aggregation logic
-  - Mixed physical/recovered execution in single batch
-  - Recovered ToolResponse with original toolCallId preservation
-  - Complete test coverage (207 tests, 0 failures)
+- ✅ M6-T6: General Durable Execution Checkpoints (NO-GO Architecture Decision)
+- ✅ M6-T6.1: Non-HITL Crash Safety Adversarial Validation (CONTRACT CLARIFIED)
+- ✅ M6-T6.2: Unification Constraint Analysis (NO-GO for now, guardrails established)
+- 🚧 **M6-T6.3: Dual-Mode Execution Architecture Gate (UNDER REVIEW)**
 
-**M6-T5 核心语义：**
-- `attemptId`: Unique physical invocation attempt identity (UUID)
-- `operationId`: Logical durable operation identity
-- `toolCallId`: Spring AI / LLM protocol identity
-- Invocation gate: `recordInvocationIntent(processId, operationId, attemptId)` 必须在 `delegate.call()` 前成功
-- Recovery classification: `DEFINITELY_NOT_DISPATCHED` / `MAY_HAVE_INVOKED` / `RESOLVED_EXECUTED` / `RESOLVED_NOT_EXECUTED`
-- Whole-batch preflight: 任何 `MAY_HAVE_INVOKED` 阻止整个 batch 物理执行
+**M6-T6.3 Architecture Gate 状态 (2026-09-16):**
+- **产品需求变化：必须同时支持 EPHEMERAL + DURABLE 两种模式**
+- **推荐决策：CONDITIONAL GO - 通过最小泛化现有持久化继续脊柱**
+- **关键分离：治理 / 持久性 / 继续倾向 是三个正交关注点**
+- **等待架构审查批准后再实施**
 
-**测试架构基线：**
-- 建立 TEST-ARCHITECTURE-BASELINE.md (2026-09-16)
-- Blast radius 监控机制
-- 决策：最小化干预，延期 Test Harness 到真实需求触发
+**M6-T6.1/T6.2 关键发现（对抗性验证）：**
+- **Arctra 的持久性契约是 CHECKPOINT-BOUNDED（有边界的）**
+- **ALLOW 执行曾是故意临时的（ephemeral by design）**
+- **但新产品需求要求 DURABLE ALLOW 支持**
 
-**Closure:** 待编写 `docs/M6-T5-DURABLE-RECOVERY-EXECUTION-RESOLUTION-CLOSURE.md`
+**Arctra 持久性契约（已验证）：**
 
-**下一步：** 继续 M6 remaining tasks 或 M6 closure
+| 执行路径 | processId | operationId | InvocationStateStore | 崩溃恢复 | 副作用保护 |
+|---------|-----------|-------------|---------------------|---------|-----------|
+| **ALLOW 执行** | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 应用程序负责 |
+| **HITL 执行** | ✅ 有 | ✅ 有 | ✅ 有（恢复时） | ✅ 完整 | ✅ T5 分类 |
+
+**关键架构洞察：**
+> ALLOW 路径不创建持久化状态不是架构疏忽——这是正确的设计选择。
+> 批准决策点是自然的持久性边界。
+
+**M6-T6.1 证明了：**
+- ❌ "从头重新执行是安全的"（无条件）= **FALSE**
+- ✅ "ALLOW 执行是临时的，HITL 执行是持久化的" = **TRUE**
+- ✅ 普通 ALLOW 工具崩溃后可能出现重复外部副作用（应用程序责任）
+- ✅ Checkpoint-backed 执行有完整的崩溃恢复能力（Arctra 保证）
+
+**M6 完整能力（已验证边界）：**
+- ✅ Checkpoint-backed 进程的跨 JVM 边界持久化恢复
+- ✅ 物理尝试身份和恢复分类（仅恢复路径）
+- ✅ 不确定调用的操作员驱动解析
+- ✅ 跨实例重启检测
+- ✅ At-least-once 工具执行语义（HITL 路径）
+- ✅ 通过 ExecutionLedger 的审计跟踪
+- ⚠️ ALLOW 执行：尽力而为，无自动崩溃恢复
+
+**已知 M6 限制（已验证的设计决策）：**
+- Checkpoint/ChatMemory 一致性（无事务协调）
+- **ALLOW 执行临时性**（故意设计，应用程序负责幂等性）
+- 模型调用计费重复（可接受的运营成本）
+- 进程发现枚举（延期到 M7）
+- 分布式协调（延期到 M8）
+
+**文档：**
+- M6-T6.1 验证: `docs/M6-T6.1-NON-HITL-CRASH-SAFETY-ADVERSARIAL-GATE.md`
+- M6-T6 架构门控: `docs/M6-T6-GENERAL-DURABLE-EXECUTION-CHECKPOINTS-ARCHITECTURE-GATE.md`
+- M6 里程碑关闭: `docs/M6-MILESTONE-CLOSURE.md`
+
+**Test Coverage:** 207 tests, 0 failures
+
+**M6-T6.3 关键架构决策：**
+
+| 决策点 | 选择 |
+|-------|------|
+| 架构方向 | CONDITIONAL GO - 最小泛化现有恢复脊柱 |
+| 关注点分离 | 治理 / 持久性 / 继续倾向（三个正交维度）|
+| 持久性选择 | AgentExecutionContext.withDurability() |
+| 默认模式 | EPHEMERAL (保留轻量级快速路径) |
+| 第一个持久化边界 | TOOL_BATCH_MATERIALIZED |
+| 当前状态权威 | CheckpointStore (单一，重用现有) |
+| CHECK A/B | 已经通用，无需修改 |
+| T5 组合 | 完全重用 InvocationStateStore |
+| 继续触发器 | 批准 (有信号) + 自动 (无信号) |
+| SuspensionCheckpoint | 87.5% 已通用，语义重新解释 |
+| Public API 影响 | 最小 (主要内部泛化) |
+
+**下一步：** 
+1. ⏳ 等待 M6-T6.3 架构审查批准
+2. ⏳ 如批准，制定详细实施计划
+3. ⏳ 实施分阶段 (Phase 1-9, 约 3-4 周)
+4. ⏳ M6 里程碑完整关闭
+5. ⏳ M7 规划（基于新的双模式能力）
+
+---
+
+## M6-T5: Durable Recovery Execution Resolution ✅ COMPLETE
+
+**完成日期：** 2026-09-16
 
 ---
 

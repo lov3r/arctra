@@ -4,6 +4,7 @@ import cn.bitcss.arctra.agent.AgentDefinition;
 import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.evidence.Evidence;
@@ -639,6 +640,7 @@ public final class DurableResumeCoordinator {
             oldCheckpoint.checkpointVersion() + 1,
             oldCheckpoint.runtimeBindingKey(), // Preserve from checkpoint
             oldCheckpoint.sessionId(),
+            ContinuationDisposition.WAITING_FOR_SIGNAL, // M6-T6.4: re-suspended awaiting approval
             suspended.pendingBatch(),
             suspended.evidences(),
             ExecutionIncarnation.current()); // M6-T4F: rollover to current

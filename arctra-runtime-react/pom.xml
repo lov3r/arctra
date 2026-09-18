@@ -24,6 +24,15 @@
             <artifactId>arctra-core</artifactId>
         </dependency>
 
+        <!-- arctra-core test classes for CheckpointTestHelper -->
+        <dependency>
+            <groupId>cn.bitcss.arctra</groupId>
+            <artifactId>arctra-core</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Spring AI: ChatClient (M1-T3 PoC and M1-T6 Engine) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>

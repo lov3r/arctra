@@ -5,6 +5,7 @@ import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.evidence.Evidence;
@@ -16,6 +17,8 @@ import cn.bitcss.arctra.governance.ToolGovernancePolicy;
 import cn.bitcss.arctra.process.AgentProcess;
 import cn.bitcss.arctra.process.ContinuationSignal;
 import cn.bitcss.arctra.process.ContinuationSignal.ApprovalSignal;
+import cn.bitcss.arctra.recovery.OperationResolution;
+import cn.bitcss.arctra.recovery.ResolutionType;
 import cn.bitcss.arctra.runtime.DurableExecutionEngine;
 import cn.bitcss.arctra.runtime.ProcessFactory;
 import cn.bitcss.arctra.runtime.RuntimeBindingResolver;
@@ -28,9 +31,11 @@ import cn.bitcss.arctra.runtime.react.durable.InvocationRecoveryClassifier;
 import cn.bitcss.arctra.runtime.react.durable.InvocationStateStore;
 import cn.bitcss.arctra.runtime.react.durable.JdbcInvocationStateStore;
 import cn.bitcss.arctra.runtime.react.durable.OperationIds;
+import cn.bitcss.arctra.runtime.react.durable.RecoveryClassificationResult;
 import cn.bitcss.arctra.runtime.react.event.CompositeExecutionEventListener;
 import cn.bitcss.arctra.runtime.react.event.ExecutionLedgerListener;
 import cn.bitcss.arctra.runtime.react.governance.GovernanceToolCallingAdvisor;
+import cn.bitcss.arctra.runtime.react.protocol.ProtocolReconstructor;
 import cn.bitcss.arctra.runtime.react.protocol.SpringAiResumedExecutionHandler;
 import cn.bitcss.arctra.runtime.react.protocol.ToolApprovalRequiredSignal;
 import cn.bitcss.arctra.runtime.react.tool.EvidenceCapturingToolCallback;
@@ -38,13 +43,16 @@ import cn.bitcss.arctra.runtime.react.tool.ToolObservationContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -91,6 +99,9 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
   private final CheckpointStore checkpointStore;
   private final RuntimeBindingResolver bindingResolver;
   private final String runtimeBindingKey;
+
+  // M6-T4E invocation-state store (paired with checkpoint store)
+  private final InvocationStateStore invocationStateStore;
 
   // M6-T2B.1 execution event sink (always non-null)
   private final ExecutionEventListener executionEventSink;
@@ -205,8 +216,7 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
     this.executionEventSink = adaptLedgerToListener(executionLedger);
 
     // M6-T4E: Create invocation-state store paired with checkpoint store
-    InvocationStateStore invocationStateStore =
-        createMatchingInvocationStateStore(checkpointStore);
+    this.invocationStateStore = createMatchingInvocationStateStore(checkpointStore);
 
     // M6-T4C Phase 1: Create recovery classifier (package-private internal)
     InvocationRecoveryClassifier recoveryClassifier =
@@ -367,9 +377,13 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
       return new AgentResult(content, evidences);
 
     } catch (ToolApprovalRequiredSignal signal) {
-      // Suspension via internal control signal - not an error
-      // User message already persisted by MessageChatMemoryAdvisor.before()
-      // No synthetic AssistantMessage placeholder persisted (after() skipped)
+      // M4/M6-T6.4: Governance signal
+      // Signal may indicate:
+      // 1. REQUIRE_APPROVAL → suspend for external approval (WAITING)
+      // 2. ALLOW + DURABLE → materialize checkpoint then auto-continue (RUNNABLE)
+
+      // For now, both paths go through suspendForApproval
+      // Phase 6 will add distinction and internal auto-continue
       return suspendForApproval(signal.state(), evidences, definition, context);
 
     } finally {
@@ -384,12 +398,265 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
       AgentDefinition definition,
       AgentExecutionContext context) {
 
-    // Check mode: durable or ephemeral
-    if (isDurableMode()) {
-      return suspendForApprovalDurable(suspensionState, evidences, definition, context);
-    } else {
-      return suspendForApprovalEphemeral(suspensionState, evidences, definition, context);
+    // M6-T6.4: Route based on disposition
+    switch (suspensionState.disposition()) {
+      case RUNNABLE:
+        // ALLOW + DURABLE → materialize checkpoint then auto-continue
+        if (isDurableMode()) {
+          return executeDurableAllow(suspensionState, evidences, definition, context);
+        } else {
+          throw new IllegalStateException(
+              "RUNNABLE disposition requires durable infrastructure (CheckpointStore)");
+        }
+
+      case WAITING_FOR_SIGNAL:
+        // REQUIRE_APPROVAL → suspend for external approval
+        if (isDurableMode()) {
+          return suspendForApprovalDurable(suspensionState, evidences, definition, context);
+        } else {
+          return suspendForApprovalEphemeral(suspensionState, evidences, definition, context);
+        }
+
+      default:
+        throw new IllegalStateException("Unknown disposition: " + suspensionState.disposition());
     }
+  }
+
+  /**
+   * Execute ALLOW + DURABLE path (M6-T6.4).
+   *
+   * <p>Materializes durable checkpoint BEFORE physical tool invocation. This implements the core
+   * M6-T6.4 invariant: logical operations must be durably reachable before physical side effects.
+   *
+   * <p><strong>Execution sequence:</strong>
+   * <ol>
+   *   <li>Generate stable processId
+   *   <li>Assign stable operationId to each tool call
+   *   <li>Build PendingToolCall batch
+   *   <li>Create RUNNABLE checkpoint (generation 1)
+   *   <li>checkpointStore.create() - DURABLE COMMIT
+   *   <li>Auto-continue execution (Phase 6 will implement internal resume)
+   * </ol>
+   *
+   * @param suspensionState governance state with RUNNABLE disposition
+   * @param evidences accumulated evidences
+   * @param definition agent definition
+   * @param context execution context with DURABLE mode
+   * @return agent result (suspended for now, Phase 6 will auto-continue)
+   */
+  private AgentResult executeDurableAllow(
+      GovernanceToolCallingAdvisor.SuspensionState suspensionState,
+      List<Evidence> evidences,
+      AgentDefinition definition,
+      AgentExecutionContext context) {
+
+    // 1. Generate stable processId
+    String processId = "P-" + System.currentTimeMillis() + "-" + UUID.randomUUID();
+
+    // 2. Build pending tool calls with stable operationIds
+    String sessionId = context.sessionId();
+    List<AssistantMessage.ToolCall> toolCalls =
+        suspensionState.assistantMessageWithToolCalls().getToolCalls();
+
+    List<PendingToolCall> pendingBatch = new ArrayList<>();
+    for (AssistantMessage.ToolCall tc : toolCalls) {
+      // Assign stable operationId (framework-owned, independent of Spring AI toolCallId)
+      String operationId = "OP-" + UUID.randomUUID();
+
+      PendingToolCall pending = new PendingToolCall(
+          operationId,
+          tc.id(),        // Spring AI toolCallId
+          tc.name(),
+          tc.arguments()  // JSON string
+      );
+      pendingBatch.add(pending);
+    }
+
+    // 3. Build RUNNABLE checkpoint (generation 1)
+    SuspensionCheckpoint checkpoint = new SuspensionCheckpoint(
+        SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+        processId,
+        1L,  // Initial version
+        runtimeBindingKey,
+        sessionId,
+        ContinuationDisposition.RUNNABLE,  // M6-T6.4: Auto-continue after materialization
+        pendingBatch,
+        List.copyOf(evidences),
+        ExecutionIncarnation.current()
+    );
+
+    // 4. DURABLE COMMIT - checkpoint MUST succeed before physical invocation
+    try {
+      checkpointStore.create(checkpoint);
+    } catch (Exception e) {
+      // Checkpoint failure = NO execution, NO side effects
+      throw new RuntimeException("Failed to materialize durable checkpoint for " + processId, e);
+    }
+
+    // 5. Emit MATERIALIZED event
+    emitEvent(processId, EventType.MATERIALIZED, 1L,
+        String.format("{\"pendingToolCount\": %d}", pendingBatch.size()));
+
+    // 6. Phase 6: Internal auto-continue
+    // Checkpoint successfully materialized - now execute tools and continue
+    try {
+      return continueFromDurableCheckpoint(checkpoint, suspensionState, evidences, definition, context);
+    } catch (Exception e) {
+      // Auto-continue failed - checkpoint exists, process can be manually resumed
+      emitEvent(processId, EventType.FAILED, 1L,
+          String.format("{\"reason\": \"auto-continue failed\", \"error\": \"%s\"}", e.getMessage()));
+
+      AgentProcess process = ProcessFactory.createDurableSuspended(processId, 1L, this);
+      throw new RuntimeException("Auto-continue failed for " + processId + ", manual resume required", e);
+    }
+  }
+
+  /**
+   * Continue from materialized RUNNABLE checkpoint (Phase 7: T5 Integration).
+   *
+   * <p><strong>M6-T6.4 Phase 7: Full T5 Integration with Crash Recovery.</strong>
+   *
+   * <p>Internal auto-continue that integrates with T5 physical attempt tracking:
+   *
+   * <ol>
+   *   <li>Classify each operation via {@link InvocationRecoveryClassifier}
+   *   <li>Execute tools via {@link ProtocolReconstructor} with recovery classifications
+   *   <li>Continue model with tool responses
+   *   <li>CHECK B: Delete checkpoint after completion
+   *   <li>Phase 9: Best-effort InvocationStateStore cleanup
+   * </ol>
+   *
+   * <p><strong>Same-incarnation vs cross-incarnation:</strong>
+   *
+   * <ul>
+   *   <li>Same incarnation: classifications=null, normal execution with T5 intent gate
+   *   <li>Cross incarnation: classifications computed, mixed physical/recovered execution
+   * </ul>
+   *
+   * @param checkpoint materialized RUNNABLE checkpoint
+   * @param suspensionState original suspension state (contains assistant message)
+   * @param evidences accumulated evidences
+   * @param definition agent definition
+   * @param context execution context
+   * @return completed agent result
+   */
+  private AgentResult continueFromDurableCheckpoint(
+      SuspensionCheckpoint checkpoint,
+      GovernanceToolCallingAdvisor.SuspensionState suspensionState,
+      List<Evidence> evidences,
+      AgentDefinition definition,
+      AgentExecutionContext context) {
+
+    String processId = checkpoint.processId();
+    List<PendingToolCall> pendingBatch = checkpoint.pendingBatch();
+    long checkpointVersion = checkpoint.checkpointVersion();
+
+    // Phase 7: Determine if this is same-incarnation or cross-incarnation execution
+    boolean isCrossIncarnation = !checkpoint.executionEpoch().equals(ExecutionIncarnation.current());
+
+    List<RecoveryClassificationResult> classifications = null;
+    if (isCrossIncarnation) {
+      // Cross-incarnation recovery: classify operations
+      InvocationRecoveryClassifier classifier = new InvocationRecoveryClassifier(invocationStateStore);
+      classifications = new ArrayList<>();
+
+      for (PendingToolCall pending : pendingBatch) {
+        RecoveryClassificationResult classification = classifier.classify(processId, pending);
+        classifications.add(classification);
+
+        // Check for unresolved uncertain attempts
+        if (classification instanceof cn.bitcss.arctra.runtime.react.durable.MayHaveInvoked mayHaveInvoked) {
+          // Unresolved uncertain operation - cannot proceed
+          emitEvent(processId, EventType.FAILED, checkpointVersion,
+              String.format("{\"reason\": \"recovery_uncertainty\", \"operationId\": \"%s\"}",
+                  mayHaveInvoked.operationId()));
+          throw new cn.bitcss.arctra.recovery.RecoveryUncertaintyException(
+              "Recovery uncertainty: operation " + mayHaveInvoked.operationId() + " has unresolved attempts",
+              processId,
+              mayHaveInvoked.operationId(),
+              mayHaveInvoked.unresolvedAttemptIds());
+        }
+      }
+    }
+
+    // Phase 7: Execute tools via ProtocolReconstructor with T5 integration
+    String sessionId = context.sessionId();
+    List<Message> conversationHistory = (sessionId != null) ? chatMemory.get(sessionId) : List.of();
+
+    // Create observation context for tool execution
+    ToolObservationContext observationContext = new ToolObservationContext(
+        processId, checkpointVersion, null, executionEventSink);
+
+    // Create ProtocolReconstructor with T5 integration
+    ProtocolReconstructor reconstructor = new ProtocolReconstructor(tools, invocationStateStore);
+
+    // Wrap tools with evidence capturing
+    List<Evidence> newEvidences = Collections.synchronizedList(new ArrayList<>());
+
+    // Execute approved batch (with classifications for cross-incarnation recovery)
+    List<Message> continuationMessages = reconstructor.executeApprovedBatch(
+        pendingBatch, conversationHistory, evidences, newEvidences, observationContext, classifications);
+
+    // Continue model with tool responses
+    // Build ChatClient without MessageChatMemoryAdvisor (memory written after CHECK B)
+    String content;
+    try {
+      ChatClient chatClient = ChatClient.builder(chatModel).build();
+
+      // Construct system instruction
+      String systemInstruction = buildSystemInstruction(definition);
+
+      // Execute with continuation messages
+      content = chatClient.prompt()
+          .system(systemInstruction)
+          .messages(continuationMessages)
+          .tools(tools.toArray(new ToolCallback[0]))
+          .call()
+          .content();
+
+    } catch (ToolApprovalRequiredSignal signal) {
+      // New tool calls require approval - this should not happen in RUNNABLE path
+      // but if it does, treat as failure for now
+      emitEvent(processId, EventType.FAILED, checkpointVersion,
+          String.format("{\"reason\": \"unexpected_governance_suspension\"}"));
+      throw new IllegalStateException(
+          "RUNNABLE execution encountered governance suspension (not yet supported)");
+    }
+
+    // Merge evidences
+    List<Evidence> mergedEvidences = new ArrayList<>(evidences);
+    mergedEvidences.addAll(newEvidences);
+
+    // CHECK B: Delete checkpoint (Phase 9)
+    boolean deleted = checkpointStore.deleteIfVersion(processId, checkpointVersion);
+    if (!deleted) {
+      emitEvent(processId, EventType.CHECKPOINT_CONFLICT, checkpointVersion,
+          String.format("{\"operation\": \"DELETE\", \"reason\": \"version mismatch\"}"));
+      throw new cn.bitcss.arctra.checkpoint.CheckpointTransitionConflictException(
+          "CHECK B delete failed for " + processId + " at version " + checkpointVersion);
+    }
+
+    // Phase 9: Best-effort InvocationStateStore cleanup
+    // This is best-effort: checkpoint deletion succeeded (the critical fact)
+    // If cleanup fails, stale state remains but does not affect correctness
+    try {
+      for (PendingToolCall pending : pendingBatch) {
+        invocationStateStore.deleteInvocationState(processId, pending.operationId());
+      }
+    } catch (Exception e) {
+      // Log but don't fail - checkpoint is the authority
+      System.err.println("Warning: InvocationStateStore cleanup failed for " + processId + ": " + e.getMessage());
+    }
+
+    // Persist completed assistant message to ChatMemory
+    persistCompletedAssistant(context, content);
+
+    // Emit COMPLETED event
+    emitEvent(processId, EventType.COMPLETED, checkpointVersion,
+        String.format("{\"checkpointVersion\": %d}", checkpointVersion));
+
+    // Return completed result
+    return new AgentResult(content, mergedEvidences);
   }
 
   /**
@@ -444,6 +711,7 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
             1L, // Initial version
             runtimeBindingKey,
             sessionId,
+            ContinuationDisposition.WAITING_FOR_SIGNAL, // M6-T6.4: approval requires waiting
             pendingBatch,
             List.copyOf(evidences), // Defensive copy
             ExecutionIncarnation.current()); // M6-T4F: current incarnation

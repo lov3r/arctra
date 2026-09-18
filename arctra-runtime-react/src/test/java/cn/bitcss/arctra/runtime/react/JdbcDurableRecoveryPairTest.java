@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.*;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
 import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
+import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.*;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.runtime.react.durable.JdbcInvocationStateStore;
 import java.util.List;
@@ -55,7 +57,7 @@ class JdbcDurableRecoveryPairTest {
     JdbcInvocationStateStore intentStoreA = new JdbcInvocationStateStore(database);
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-restart-pair",
             1L,
@@ -88,7 +90,7 @@ class JdbcDurableRecoveryPairTest {
 
     // Both stores write to same database
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-same-ds",
             1L,
@@ -128,7 +130,7 @@ class JdbcDurableRecoveryPairTest {
 
     // Write checkpoint
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-raw",
             1L,
@@ -157,7 +159,7 @@ class JdbcDurableRecoveryPairTest {
     JdbcInvocationStateStore intentStore = new JdbcInvocationStateStore(database);
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-orphan",
             1L,
@@ -184,7 +186,7 @@ class JdbcDurableRecoveryPairTest {
     JdbcInvocationStateStore intentStore = new JdbcInvocationStateStore(database);
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-multi",
             1L,
@@ -215,7 +217,7 @@ class JdbcDurableRecoveryPairTest {
     JdbcInvocationStateStore jdbcIntent = new JdbcInvocationStateStore(database);
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-mixed",
             1L,

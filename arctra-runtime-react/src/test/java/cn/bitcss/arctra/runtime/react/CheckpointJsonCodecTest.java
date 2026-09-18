@@ -3,6 +3,8 @@ package cn.bitcss.arctra.runtime.react;
 import static org.assertj.core.api.Assertions.*;
 
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
+import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.*;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.runtime.react.persistence.CheckpointJsonCodec;
@@ -27,12 +29,13 @@ class CheckpointJsonCodecTest {
   @DisplayName("Round-trip with complete checkpoint")
   void roundTripComplete() {
     SuspensionCheckpoint original =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-123",
             5L,
             "incident-agent",
             "session-abc",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(
                 new PendingToolCall("op-1", "tc-1", "query_logs", "{\"severity\":\"error\"}"),
                 new PendingToolCall("op-2", "tc-2", "get_deployment", "{\"service\":\"api\"}")),
@@ -51,12 +54,13 @@ class CheckpointJsonCodecTest {
   @DisplayName("Preserve nullable sessionId")
   void nullableSessionId() {
     SuspensionCheckpoint withNull =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-456",
             1L,
             "test-key",
             null, // nullable sessionId
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-x", "tc-x", "tool", "{}")),
             List.of(), "test-epoch");
 
@@ -73,12 +77,13 @@ class CheckpointJsonCodecTest {
     String operationId = "op-uuid-12345-abcde";
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-1",
             1L,
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall(operationId, "tc-1", "tool", "{}")),
             List.of(), "test-epoch");
 
@@ -94,12 +99,13 @@ class CheckpointJsonCodecTest {
     String toolCallId = "call_abc123XYZ";
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-1",
             1L,
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-1", toolCallId, "tool", "{}")),
             List.of(), "test-epoch");
 
@@ -115,12 +121,13 @@ class CheckpointJsonCodecTest {
     String arguments = "{\"query\":\"error\",\"limit\":100}";
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-1",
             1L,
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-1", "tc-1", "query", arguments)),
             List.of(), "test-epoch");
 
@@ -136,12 +143,13 @@ class CheckpointJsonCodecTest {
     Evidence evidence = new Evidence("tool-x", "Complex\nMulti-line\nResult");
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-1",
             1L,
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.of(evidence),
             "test-epoch");
@@ -162,7 +170,7 @@ class CheckpointJsonCodecTest {
             new PendingToolCall("op-3", "tc-3", "tool-c", "{}"));
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint("1.0", "proc-1", 1L, "key", "session", pending, List.of(), "test-epoch");
+        checkpoint("1.0", "proc-1", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, pending, List.of(), "test-epoch");
 
     String json = codec.serialize(checkpoint);
     SuspensionCheckpoint deserialized = codec.deserialize(json);
@@ -174,12 +182,13 @@ class CheckpointJsonCodecTest {
   @DisplayName("Empty accumulated evidences round-trip")
   void emptyEvidences() {
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.0",
             "proc-1",
             1L,
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.of(),
             "test-epoch"); // empty evidences

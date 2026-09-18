@@ -8,6 +8,8 @@ import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
+import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.*;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.execution.EventType;
@@ -188,7 +190,7 @@ class AutomaticRecoveryModeSelectionTest {
     PendingToolCall operation = new PendingToolCall("op-1", "tc-1", "tool-1", "{}");
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint(
+        checkpoint(
             "1.1",
             processId,
             1L,

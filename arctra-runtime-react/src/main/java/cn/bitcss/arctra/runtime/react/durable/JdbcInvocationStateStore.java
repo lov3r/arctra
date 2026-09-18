@@ -373,4 +373,35 @@ public final class JdbcInvocationStateStore implements InvocationStateStore {
         ? OperationResolution.notExecuted(operationId, attemptId, resolvedAt)
         : OperationResolution.executed(operationId, attemptId, recoveredResult, resolvedAt);
   }
+
+  @Override
+  public void deleteInvocationState(String processId, String operationId) {
+    Objects.requireNonNull(processId, "processId cannot be null");
+    Objects.requireNonNull(operationId, "operationId cannot be null");
+
+    if (processId.isBlank()) {
+      throw new IllegalArgumentException("processId cannot be blank");
+    }
+    if (operationId.isBlank()) {
+      throw new IllegalArgumentException("operationId cannot be blank");
+    }
+
+    // Delete all attempts and resolutions for this operation
+    // Order matters: delete resolutions first (foreign key)
+    jdbcTemplate.update(
+        """
+        DELETE FROM arctra_recovery_resolutions
+        WHERE process_id = ? AND operation_id = ?
+        """,
+        processId,
+        operationId);
+
+    jdbcTemplate.update(
+        """
+        DELETE FROM arctra_invocation_intents
+        WHERE process_id = ? AND operation_id = ?
+        """,
+        processId,
+        operationId);
+  }
 }
