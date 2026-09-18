@@ -391,10 +391,13 @@ class DurableResumeExecutionTest {
 
   private SuspensionCheckpoint createCheckpoint(
       String processId, long version, String bindingKey, String sessionId) {
-    return checkpoint(        processId,
+    return new SuspensionCheckpoint(
+        SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+        processId,
         version,
         bindingKey,
         sessionId,
+        ContinuationDisposition.WAITING_FOR_SIGNAL,
         List.of(new PendingToolCall("test-op-1", "tc-1", "testTool", "{}")),
         List.of(), "test-epoch");
   }

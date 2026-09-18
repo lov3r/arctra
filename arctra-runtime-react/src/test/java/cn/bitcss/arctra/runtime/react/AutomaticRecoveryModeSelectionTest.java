@@ -112,10 +112,10 @@ class AutomaticRecoveryModeSelectionTest {
         .as("executionEpoch should be UUID format")
         .matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 
-    // Then - schema version is 1.1
+    // Then - schema version is 1.2 (M6-T6.4: includes disposition)
     assertThat(checkpoint.schemaVersion())
-        .as("Schema version should be 1.1")
-        .isEqualTo("1.1");
+        .as("Schema version should be 1.2")
+        .isEqualTo("1.2");
   }
 
   // Test 2: Multiple Engine instances in same ClassLoader share incarnation
@@ -190,12 +190,13 @@ class AutomaticRecoveryModeSelectionTest {
     PendingToolCall operation = new PendingToolCall("op-1", "tc-1", "tool-1", "{}");
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(
+        new SuspensionCheckpoint(
             "1.1",
             processId,
             1L,
             BINDING_KEY,
             SESSION_ID,
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(operation),
             List.of(),
             ExecutionIncarnation.current()); // SAME incarnation
@@ -286,6 +287,11 @@ class AutomaticRecoveryModeSelectionTest {
     public java.util.Optional<cn.bitcss.arctra.recovery.OperationResolution> getResolution(
         String processId, String operationId, String attemptId) {
       return java.util.Optional.empty();
+    }
+
+    @Override
+    public void deleteInvocationState(String processId, String operationId) {
+      // No-op for test
     }
   }
 

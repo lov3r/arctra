@@ -3,6 +3,7 @@ package cn.bitcss.arctra.runtime.react.protocol;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.runtime.react.durable.AttemptIds;
+import cn.bitcss.arctra.runtime.react.durable.InvocationIntentPersistenceException;
 import cn.bitcss.arctra.runtime.react.durable.InvocationStateStore;
 import cn.bitcss.arctra.runtime.react.durable.RecoveryClassificationResult;
 import cn.bitcss.arctra.runtime.react.durable.ResolvedExecuted;
@@ -176,7 +177,7 @@ public class ProtocolReconstructor {
     // Reconstruct AssistantMessage with original ToolCalls (for protocol compliance)
     List<AssistantMessage.ToolCall> toolCalls =
         pendingBatch.stream()
-            .<AssistantMessage.ToolCall>map(
+            .map(
                 dto ->
                     new AssistantMessage.ToolCall(
                         dto.toolCallId(), // Preserve exact toolCallId

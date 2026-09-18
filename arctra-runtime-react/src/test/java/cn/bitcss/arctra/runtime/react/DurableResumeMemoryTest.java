@@ -85,12 +85,15 @@ class DurableResumeMemoryTest {
             "test-key");
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "process-1",
+        checkpoint(
+            "process-1",
             1L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
 
     store.checkpoints.put("process-1", checkpoint);
 
@@ -160,12 +163,15 @@ class DurableResumeMemoryTest {
             "test-key");
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "process-1",
+        checkpoint(
+            "process-1",
             1L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
 
     store.checkpoints.put("process-1", checkpoint);
 
@@ -238,12 +244,15 @@ class DurableResumeMemoryTest {
 
     // Checkpoint v1 with sessionId = "session-123"
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "process-1",
+        checkpoint(
+            "process-1",
             1L,
             "test-key",
             "session-123",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
 
     store.checkpoints.put("process-1", checkpoint);
 

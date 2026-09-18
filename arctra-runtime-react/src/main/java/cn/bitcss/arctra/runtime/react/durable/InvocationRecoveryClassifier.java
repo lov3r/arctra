@@ -103,7 +103,7 @@ public final class InvocationRecoveryClassifier {
       }
 
       // Use the first EXECUTED resolution
-      OperationResolution resolution = executedAttempts.get(0).resolution().orElseThrow();
+      OperationResolution resolution = executedAttempts.getFirst().resolution().orElseThrow();
       return RecoveryClassificationResult.resolvedExecuted(
           operationId, resolution.attemptId(), resolution.recoveredResult().orElseThrow());
     }

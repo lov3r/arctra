@@ -60,10 +60,12 @@ class ExplicitRecoveryPathTest {
     PendingToolCall opB = new PendingToolCall("op-B", "tc-B", "tool-B", "{}");
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "proc-test",
+        checkpoint(
+            "proc-test",
             1L,
             "binding-test",
             "session-test",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(opA, opB),
             List.of(),
             "epoch-original");
@@ -132,10 +134,12 @@ class ExplicitRecoveryPathTest {
     PendingToolCall opB = new PendingToolCall("op-B", "tc-B", "tool-B", "{}");
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "proc-test",
+        checkpoint(
+            "proc-test",
             1L,
             "binding-test",
             "session-test",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(opA, opB),
             List.of(),
             "epoch-original");
@@ -198,10 +202,12 @@ class ExplicitRecoveryPathTest {
     PendingToolCall opB = new PendingToolCall("op-B", "tc-B", "tool-B", "{}");
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "proc-test",
+        checkpoint(
+            "proc-test",
             1L,
             "binding-test",
             "session-test",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(opA, opB), // op-A first
             List.of(),
             "epoch-original");
@@ -284,15 +290,22 @@ class ExplicitRecoveryPathTest {
               String processId, String operationId, String attemptId) {
             return java.util.Optional.empty();
           }
+
+          @Override
+          public void deleteInvocationState(String processId, String operationId) {
+            // No-op for test
+          }
         };
 
     PendingToolCall opA = new PendingToolCall("op-A", "tc-A", "tool-A", "{}");
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "proc-test",
+        checkpoint(
+            "proc-test",
             1L,
             "binding-test",
             "session-test",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(opA),
             List.of(),
             "epoch-original");
@@ -356,10 +369,12 @@ class ExplicitRecoveryPathTest {
     PendingToolCall opA = new PendingToolCall("op-A", "tc-A", "tool-A", "{}");
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "proc-test",
+        checkpoint(
+            "proc-test",
             1L,
             "binding-test",
             "session-test",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(opA),
             List.of(),
             "epoch-original");
@@ -447,6 +462,11 @@ class ExplicitRecoveryPathTest {
     public java.util.Optional<cn.bitcss.arctra.recovery.OperationResolution> getResolution(
         String processId, String operationId, String attemptId) {
       return delegate.getResolution(processId, operationId, attemptId);
+    }
+
+    @Override
+    public void deleteInvocationState(String processId, String operationId) {
+      delegate.deleteInvocationState(processId, operationId);
     }
 
     void clearReadCalls() {

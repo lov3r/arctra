@@ -1,5 +1,6 @@
 package cn.bitcss.arctra.runtime.react;
 
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.runtime.react.durable.ExecutionIncarnation;
@@ -109,6 +110,7 @@ public final class TestCheckpoints {
         version,
         STANDARD_BINDING_KEY,
         STANDARD_SESSION_ID,
+        ContinuationDisposition.WAITING_FOR_SIGNAL, // M6-T6.4: default to WAITING
         pendingBatch,
         List.of(),
         ExecutionIncarnation.current()); // M6-T4F: current epoch
@@ -134,6 +136,7 @@ public final class TestCheckpoints {
         version,
         STANDARD_BINDING_KEY,
         sessionId,
+        ContinuationDisposition.WAITING_FOR_SIGNAL, // M6-T6.4: default to WAITING
         pendingBatch,
         List.of(),
         ExecutionIncarnation.current()); // M6-T4F
@@ -164,6 +167,7 @@ public final class TestCheckpoints {
         version,
         bindingKey,
         sessionId,
+        ContinuationDisposition.WAITING_FOR_SIGNAL,
         pendingBatch,
         List.of(),
         ExecutionIncarnation.current()); // M6-T4F
@@ -229,6 +233,7 @@ public final class TestCheckpoints {
         version,
         bindingKey,
         sessionId,
+        ContinuationDisposition.WAITING_FOR_SIGNAL,
         List.of(new PendingToolCall(testOperationId(0), "tc-dummy", "dummyTool", "{}")),
         evidences,
         ExecutionIncarnation.current()); // M6-T4F
@@ -253,6 +258,7 @@ public final class TestCheckpoints {
         version,
         STANDARD_BINDING_KEY,
         STANDARD_SESSION_ID,
+        ContinuationDisposition.WAITING_FOR_SIGNAL,
         List.of(new PendingToolCall(testOperationId(0), "tc-dummy", "dummyTool", "{}")),
         List.of(),
         executionEpoch);

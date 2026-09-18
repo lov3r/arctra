@@ -62,11 +62,11 @@ class JdbcCheckpointStoreTest {
   void createAndLoad() {
     SuspensionCheckpoint checkpoint =
         checkpoint(
-            "1.0",
             "proc-123",
             1L,
             "test-key",
             "session-abc",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-1", "tc-1", "query_logs", "{}")),
             List.of(new Evidence("tool-x", "result")),
             "test-epoch-001");
@@ -91,24 +91,18 @@ class JdbcCheckpointStoreTest {
   @DisplayName("Create duplicate processId throws CheckpointAlreadyExistsException")
   void createDuplicateProcessId() {
     SuspensionCheckpoint checkpoint1 =
-        checkpoint(
-            "1.0",
-            "proc-dup",
-            1L,
-            "key",
-            "session",
-            List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
+        checkpoint("proc-dup", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
     store.create(checkpoint1);
 
     SuspensionCheckpoint checkpoint2 =
         checkpoint(
-            "1.0",
             "proc-dup", // same processId
             2L, // different version
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-2", "tc-2", "tool", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
@@ -122,11 +116,11 @@ class JdbcCheckpointStoreTest {
   void nullableSessionId() {
     SuspensionCheckpoint checkpoint =
         checkpoint(
-            "1.0",
             "proc-null-session",
             1L,
             "key",
             null, // null sessionId
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
@@ -145,13 +139,7 @@ class JdbcCheckpointStoreTest {
     JdbcCheckpointStore storeA = new JdbcCheckpointStore(database);
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(
-            "1.0",
-            "proc-restart",
-            1L,
-            "key",
-            "session",
-            List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
+        checkpoint("proc-restart", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
     storeA.create(checkpoint);
@@ -172,24 +160,18 @@ class JdbcCheckpointStoreTest {
   @DisplayName("replaceIfVersion with matching version succeeds")
   void replaceIfVersionSuccess() {
     SuspensionCheckpoint v1 =
-        checkpoint(
-            "1.0",
-            "proc-replace",
-            1L,
-            "key",
-            "session",
-            List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
+        checkpoint("proc-replace", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
     store.create(v1);
 
     SuspensionCheckpoint v2 =
         checkpoint(
-            "1.0",
             "proc-replace",
             2L, // incremented version
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-2", "tc-2", "tool", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
@@ -206,25 +188,13 @@ class JdbcCheckpointStoreTest {
   @DisplayName("replaceIfVersion with stale version fails")
   void replaceIfVersionStale() {
     SuspensionCheckpoint v1 =
-        checkpoint(
-            "1.0",
-            "proc-stale",
-            1L,
-            "key",
-            "session",
-            List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
+        checkpoint("proc-stale", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
     store.create(v1);
 
     SuspensionCheckpoint v2 =
-        checkpoint(
-            "1.0",
-            "proc-stale",
-            2L,
-            "key",
-            "session",
-            List.of(new PendingToolCall("op-2", "tc-2", "tool", "{}")),
+        checkpoint("proc-stale", 2L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, List.of(new PendingToolCall("op-2", "tc-2", "tool", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
     // Replace v1 → v2
@@ -232,13 +202,7 @@ class JdbcCheckpointStoreTest {
 
     // Attempt stale replace (v1 → v3)
     SuspensionCheckpoint v3 =
-        checkpoint(
-            "1.0",
-            "proc-stale",
-            3L,
-            "key",
-            "session",
-            List.of(new PendingToolCall("op-3", "tc-3", "tool", "{}")),
+        checkpoint("proc-stale", 3L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, List.of(new PendingToolCall("op-3", "tc-3", "tool", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
     boolean replaced = store.replaceIfVersion("proc-stale", 1L, v3);
@@ -255,13 +219,7 @@ class JdbcCheckpointStoreTest {
   @DisplayName("deleteIfVersion with matching version succeeds")
   void deleteIfVersionSuccess() {
     SuspensionCheckpoint checkpoint =
-        checkpoint(
-            "1.0",
-            "proc-delete",
-            1L,
-            "key",
-            "session",
-            List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
+        checkpoint("proc-delete", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
     store.create(checkpoint);
@@ -279,11 +237,11 @@ class JdbcCheckpointStoreTest {
   void deleteIfVersionStale() {
     SuspensionCheckpoint checkpoint =
         checkpoint(
-            "1.0",
             "proc-delete-stale",
             2L, // version 2
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
@@ -303,13 +261,7 @@ class JdbcCheckpointStoreTest {
   @DisplayName("Concurrent replaceIfVersion: exactly one succeeds")
   void concurrentReplaceExactlyOneSucceeds() throws Exception {
     SuspensionCheckpoint v1 =
-        checkpoint(
-            "1.0",
-            "proc-concurrent",
-            1L,
-            "key",
-            "session",
-            List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
+        checkpoint("proc-concurrent", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
     store.create(v1);
@@ -319,23 +271,11 @@ class JdbcCheckpointStoreTest {
     JdbcCheckpointStore storeB = new JdbcCheckpointStore(database);
 
     SuspensionCheckpoint v2 =
-        checkpoint(
-            "1.0",
-            "proc-concurrent",
-            2L,
-            "key",
-            "session",
-            List.of(new PendingToolCall("op-2", "tc-2", "tool-a", "{}")),
+        checkpoint("proc-concurrent", 2L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, List.of(new PendingToolCall("op-2", "tc-2", "tool-a", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
     SuspensionCheckpoint v3 =
-        checkpoint(
-            "1.0",
-            "proc-concurrent",
-            3L,
-            "key",
-            "session",
-            List.of(new PendingToolCall("op-3", "tc-3", "tool-b", "{}")),
+        checkpoint("proc-concurrent", 3L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, List.of(new PendingToolCall("op-3", "tc-3", "tool-b", "{}")),
             List.<Evidence>of(), "test-epoch-001");
 
     CountDownLatch startLatch = new CountDownLatch(1);
@@ -404,13 +344,7 @@ class JdbcCheckpointStoreTest {
     String operationId = "op-uuid-exact-12345";
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(
-            "1.0",
-            "proc-opid",
-            1L,
-            "key",
-            "session",
-            List.of(new PendingToolCall(operationId, "tc-1", "tool", "{}")),
+        checkpoint("proc-opid", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, List.of(new PendingToolCall(operationId, "tc-1", "tool", "{}")),
             List.<Evidence>of(),
             "test-epoch-001");
 
@@ -432,7 +366,7 @@ class JdbcCheckpointStoreTest {
             new PendingToolCall("op-3", "tc-3", "tool-c", "{}"));
 
     SuspensionCheckpoint checkpoint =
-        checkpoint("1.0", "proc-multi-op", 1L, "key", "session", pending, List.<Evidence>of(), "test-epoch-001");
+        checkpoint("proc-multi-op", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, pending, List.<Evidence>of(), "test-epoch-001");
 
     store.create(checkpoint);
 
@@ -449,13 +383,7 @@ class JdbcCheckpointStoreTest {
     JdbcCheckpointStore storeB = new JdbcCheckpointStore(database);
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(
-            "1.0",
-            "proc-cross",
-            1L,
-            "key",
-            "session",
-            List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
+        checkpoint("proc-cross", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.<Evidence>of(),
             "test-epoch-001");
 

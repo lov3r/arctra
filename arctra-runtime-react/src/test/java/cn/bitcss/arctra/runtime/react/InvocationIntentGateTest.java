@@ -68,6 +68,11 @@ class InvocationIntentGateTest {
               String processId, String operationId, String attemptId) {
             return java.util.Optional.empty();
           }
+
+          @Override
+          public void deleteInvocationState(String processId, String operationId) {
+            // No-op for test
+          }
         };
 
     // Given - counting delegate to track invocations
@@ -214,6 +219,11 @@ class InvocationIntentGateTest {
           public java.util.Optional<cn.bitcss.arctra.recovery.OperationResolution> getResolution(
               String processId, String operationId, String attemptId) {
             return delegate.getResolution(processId, operationId, attemptId);
+          }
+
+          @Override
+          public void deleteInvocationState(String processId, String operationId) {
+            delegate.deleteInvocationState(processId, operationId);
           }
         };
 
@@ -390,6 +400,11 @@ class InvocationIntentGateTest {
           public java.util.Optional<cn.bitcss.arctra.recovery.OperationResolution> getResolution(
               String processId, String operationId, String attemptId) {
             return java.util.Optional.empty();
+          }
+
+          @Override
+          public void deleteInvocationState(String processId, String operationId) {
+            // No-op for test
           }
         };
 

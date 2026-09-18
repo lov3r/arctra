@@ -73,6 +73,13 @@ public final class CheckpointJsonCodec {
         root.putNull("sessionId");
       }
 
+      // M6-T6.4: disposition (v1.2)
+      if (checkpoint.disposition() != null) {
+        root.put("disposition", checkpoint.disposition().name());
+      } else {
+        root.putNull("disposition");
+      }
+
       // Pending batch
       ArrayNode pendingArray = root.putArray("pendingBatch");
       for (PendingToolCall pending : checkpoint.pendingBatch()) {

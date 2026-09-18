@@ -1,6 +1,7 @@
 package cn.bitcss.arctra.runtime.react.governance;
 
 import cn.bitcss.arctra.agent.AgentExecutionContext;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.durability.DurabilityMode;
 import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.governance.GovernanceDecision;
@@ -215,9 +216,7 @@ public class GovernanceToolCallingAdvisor implements CallAdvisor {
 
       // Build next request with updated messages
       // CRITICAL: must pass toolCallingChatOptions to preserve tool definitions (if available)
-      Prompt nextPrompt = (toolCallingChatOptions != null)
-          ? new Prompt(nextInstructions, toolCallingChatOptions)
-          : new Prompt(nextInstructions);
+      Prompt nextPrompt = new Prompt(nextInstructions, toolCallingChatOptions);
 
       currentRequest = ChatClientRequest.builder()
           .prompt(nextPrompt)
@@ -316,7 +315,7 @@ public class GovernanceToolCallingAdvisor implements CallAdvisor {
         currentRequest,
         assistantMessage,  // Contains all ToolCalls
         new ArrayList<>(Objects.requireNonNull(evidences.get())),
-        cn.bitcss.arctra.checkpoint.ContinuationDisposition.WAITING_FOR_SIGNAL  // M6-T6.4: Approval required
+        ContinuationDisposition.WAITING_FOR_SIGNAL  // M6-T6.4: Approval required
     );
 
     // Throw internal control signal - suspension is Process state, not conversational message
@@ -341,7 +340,7 @@ public class GovernanceToolCallingAdvisor implements CallAdvisor {
         currentRequest,
         assistantMessage,  // Contains all ToolCalls for durable materialization
         new ArrayList<>(Objects.requireNonNull(evidences.get())),
-        cn.bitcss.arctra.checkpoint.ContinuationDisposition.RUNNABLE  // M6-T6.4: Auto-continue after materialization
+        ContinuationDisposition.RUNNABLE  // M6-T6.4: Auto-continue after materialization
     );
 
     // Throw internal control signal - durable materialization required
@@ -387,5 +386,5 @@ public class GovernanceToolCallingAdvisor implements CallAdvisor {
       ChatClientRequest originalRequest,
       AssistantMessage assistantMessageWithToolCalls,
       List<Evidence> evidences,
-      cn.bitcss.arctra.checkpoint.ContinuationDisposition disposition) {}
+      ContinuationDisposition disposition) {}
 }

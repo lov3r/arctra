@@ -90,10 +90,13 @@ class DurableResumeGovernanceTest {
 
     // Checkpoint with pending Tool A (already passed governance with REQUIRE_APPROVAL)
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "process-1",
+        new SuspensionCheckpoint(
+            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+            "process-1",
             1L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
             List.of(), "test-epoch");
 
@@ -152,10 +155,13 @@ class DurableResumeGovernanceTest {
             "test-key");
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "process-1",
+        new SuspensionCheckpoint(
+            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+            "process-1",
             1L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
             List.of(), "test-epoch");
 
@@ -240,10 +246,13 @@ class DurableResumeGovernanceTest {
 
     // Checkpoint with pending Tool A
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "process-1",
+        new SuspensionCheckpoint(
+            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+            "process-1",
             1L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-1", "tc-1", "toolA", "{}")),
             List.of(), "test-epoch");
 

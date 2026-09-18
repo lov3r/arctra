@@ -100,6 +100,11 @@ class InvocationRecoveryClassifierTest {
               String processId, String operationId, String attemptId) {
             return java.util.Optional.empty();
           }
+
+          @Override
+          public void deleteInvocationState(String processId, String operationId) {
+            // No-op
+          }
         };
 
     InvocationRecoveryClassifier classifier = new InvocationRecoveryClassifier(failingStore);

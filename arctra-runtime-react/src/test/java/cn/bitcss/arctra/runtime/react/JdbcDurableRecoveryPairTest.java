@@ -58,13 +58,14 @@ class JdbcDurableRecoveryPairTest {
 
     SuspensionCheckpoint checkpoint =
         checkpoint(
-            "1.0",
             "proc-restart-pair",
             1L,
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-durable", "tc-1", "query_logs", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
 
     checkpointStoreA.create(checkpoint);
     intentStoreA.recordInvocationIntent("proc-restart-pair", "op-durable", "attempt-test");
@@ -91,13 +92,14 @@ class JdbcDurableRecoveryPairTest {
     // Both stores write to same database
     SuspensionCheckpoint checkpoint =
         checkpoint(
-            "1.0",
             "proc-same-ds",
             1L,
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
 
     checkpointStore.create(checkpoint);
     intentStore.recordInvocationIntent("proc-same-ds", "op-1", "attempt-test");
@@ -131,13 +133,14 @@ class JdbcDurableRecoveryPairTest {
     // Write checkpoint
     SuspensionCheckpoint checkpoint =
         checkpoint(
-            "1.0",
             "proc-raw",
             1L,
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-raw", "tc-1", "tool", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
 
     checkpointStore.create(checkpoint);
 
@@ -160,13 +163,14 @@ class JdbcDurableRecoveryPairTest {
 
     SuspensionCheckpoint checkpoint =
         checkpoint(
-            "1.0",
             "proc-orphan",
             1L,
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-orphan", "tc-1", "tool", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
 
     checkpointStore.create(checkpoint);
     intentStore.recordInvocationIntent("proc-orphan", "op-orphan", "attempt-test");
@@ -187,16 +191,17 @@ class JdbcDurableRecoveryPairTest {
 
     SuspensionCheckpoint checkpoint =
         checkpoint(
-            "1.0",
             "proc-multi",
             1L,
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(
                 new PendingToolCall("op-1", "tc-1", "tool-a", "{}"),
                 new PendingToolCall("op-2", "tc-2", "tool-b", "{}"),
                 new PendingToolCall("op-3", "tc-3", "tool-c", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
 
     checkpointStore.create(checkpoint);
 
@@ -218,13 +223,14 @@ class JdbcDurableRecoveryPairTest {
 
     SuspensionCheckpoint checkpoint =
         checkpoint(
-            "1.0",
             "proc-mixed",
             1L,
             "key",
             "session",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-mixed", "tc-1", "tool", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch");
 
     inMemoryCheckpoint.create(checkpoint);
     jdbcIntent.recordInvocationIntent("proc-mixed", "op-mixed", "attempt-test");

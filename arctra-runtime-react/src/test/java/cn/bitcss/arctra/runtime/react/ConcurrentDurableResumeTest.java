@@ -209,10 +209,13 @@ class ConcurrentDurableResumeTest {
 
     // Pre-create checkpoint v1 with pending toolX
     SuspensionCheckpoint cp1 =
-        checkpoint(            "P100",
+        new SuspensionCheckpoint(
+            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+            "P100",
             1L,
             BINDING_KEY,
             SESSION_ID,
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolX", "{}")),
             List.of(), "test-epoch");
     store.create(cp1);
@@ -327,10 +330,13 @@ class ConcurrentDurableResumeTest {
 
     // Pre-create checkpoint v1 with pending toolX
     SuspensionCheckpoint cp1 =
-        checkpoint(            "P100",
+        new SuspensionCheckpoint(
+            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+            "P100",
             1L,
             BINDING_KEY,
             SESSION_ID,
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolX", "{}")),
             List.of(), "test-epoch");
     store.create(cp1);
@@ -416,10 +422,13 @@ class ConcurrentDurableResumeTest {
 
     // Initial checkpoint v1
     SuspensionCheckpoint cp1 =
-        checkpoint(            "P100",
+        new SuspensionCheckpoint(
+            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+            "P100",
             1L,
             BINDING_KEY,
             SESSION_ID,
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolX", "{}")),
             List.of(), "test-epoch");
     store.create(cp1);

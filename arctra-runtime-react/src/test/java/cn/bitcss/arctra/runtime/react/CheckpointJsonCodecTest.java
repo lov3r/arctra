@@ -29,7 +29,7 @@ class CheckpointJsonCodecTest {
   @DisplayName("Round-trip with complete checkpoint")
   void roundTripComplete() {
     SuspensionCheckpoint original =
-        checkpoint(
+        new SuspensionCheckpoint(
             "1.0",
             "proc-123",
             5L,
@@ -54,7 +54,7 @@ class CheckpointJsonCodecTest {
   @DisplayName("Preserve nullable sessionId")
   void nullableSessionId() {
     SuspensionCheckpoint withNull =
-        checkpoint(
+        new SuspensionCheckpoint(
             "1.0",
             "proc-456",
             1L,
@@ -77,7 +77,7 @@ class CheckpointJsonCodecTest {
     String operationId = "op-uuid-12345-abcde";
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(
+        new SuspensionCheckpoint(
             "1.0",
             "proc-1",
             1L,
@@ -99,7 +99,7 @@ class CheckpointJsonCodecTest {
     String toolCallId = "call_abc123XYZ";
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(
+        new SuspensionCheckpoint(
             "1.0",
             "proc-1",
             1L,
@@ -121,7 +121,7 @@ class CheckpointJsonCodecTest {
     String arguments = "{\"query\":\"error\",\"limit\":100}";
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(
+        new SuspensionCheckpoint(
             "1.0",
             "proc-1",
             1L,
@@ -143,7 +143,7 @@ class CheckpointJsonCodecTest {
     Evidence evidence = new Evidence("tool-x", "Complex\nMulti-line\nResult");
 
     SuspensionCheckpoint checkpoint =
-        checkpoint(
+        new SuspensionCheckpoint(
             "1.0",
             "proc-1",
             1L,
@@ -170,7 +170,7 @@ class CheckpointJsonCodecTest {
             new PendingToolCall("op-3", "tc-3", "tool-c", "{}"));
 
     SuspensionCheckpoint checkpoint =
-        checkpoint("1.0", "proc-1", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, pending, List.of(), "test-epoch");
+        new SuspensionCheckpoint("1.0", "proc-1", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, pending, List.of(), "test-epoch");
 
     String json = codec.serialize(checkpoint);
     SuspensionCheckpoint deserialized = codec.deserialize(json);
@@ -182,7 +182,7 @@ class CheckpointJsonCodecTest {
   @DisplayName("Empty accumulated evidences round-trip")
   void emptyEvidences() {
     SuspensionCheckpoint checkpoint =
-        checkpoint(
+        new SuspensionCheckpoint(
             "1.0",
             "proc-1",
             1L,

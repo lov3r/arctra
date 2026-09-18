@@ -83,10 +83,13 @@ class DurableResumeEvidenceTest {
     // Create checkpoint with historical Evidence A
     Evidence evidenceA = new Evidence("test:source", "Evidence A content");
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "process-1",
+        new SuspensionCheckpoint(
+            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+            "process-1",
             1L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolB", "{}")),
             List.of(evidenceA),
             "test-epoch");
@@ -159,10 +162,13 @@ class DurableResumeEvidenceTest {
     // Checkpoint with historical Evidence A
     Evidence evidenceA = new Evidence("test:source", "Evidence A");
     SuspensionCheckpoint checkpoint =
-        checkpoint(            "process-1",
+        new SuspensionCheckpoint(
+            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+            "process-1",
             1L,
             "test-key",
             "session-1",
+            ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolA", "{}")),
             List.of(evidenceA),
             "test-epoch");
