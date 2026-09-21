@@ -32,7 +32,8 @@ public class CheckpointTestHelper {
         ContinuationDisposition.WAITING_FOR_SIGNAL,
         pendingBatch,
         List.of(),
-        "test-epoch");
+        "test-epoch",
+        null); // M8-D: procedureState null for ReAct execution
   }
 
   /**
@@ -54,7 +55,8 @@ public class CheckpointTestHelper {
         ContinuationDisposition.RUNNABLE,
         pendingBatch,
         List.of(),
-        "test-epoch");
+        "test-epoch",
+        null); // M8-D: procedureState null for ReAct execution
   }
 
   /**
@@ -88,6 +90,7 @@ public class CheckpointTestHelper {
         disposition,
         pendingBatch,
         evidences,
-        epoch);
+        epoch,
+        null); // M8-D: procedureState null for ReAct execution
   }
 }

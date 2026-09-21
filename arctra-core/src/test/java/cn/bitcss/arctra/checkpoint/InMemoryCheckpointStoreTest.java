@@ -158,6 +158,7 @@ class InMemoryCheckpointStoreTest {
         ContinuationDisposition.WAITING_FOR_SIGNAL,
         List.of(new PendingToolCall("test-op-X", "tc-1", "testTool", "{}")),
         List.of(),
-        "test-epoch");
+        "test-epoch",
+        null); // M8-D: procedureState null for ReAct execution
   }
 }

@@ -1,6 +1,7 @@
 package cn.bitcss.arctra.checkpoint;
 
 import cn.bitcss.arctra.evidence.Evidence;
+import cn.bitcss.arctra.procedure.ProcedureExecutionState;
 import java.util.List;
 import java.util.Objects;
 
@@ -25,6 +26,19 @@ import java.util.Objects;
  * <p>The {@link #disposition()} field makes this checkpoint self-describing - recovery logic can
  * determine continuation semantics directly from persisted state.
  *
+ * <h2>M8-D Procedure Execution State</h2>
+ *
+ * <p>The optional {@link #procedureState()} field tracks stepwise procedure execution progress:
+ *
+ * <ul>
+ *   <li>Which procedure and revision is executing
+ *   <li>Current step index (next step to execute)
+ *   <li>Bound input parameters
+ *   <li>Captured step outputs (for PREVIOUS_STEP_OUTPUT bindings)
+ * </ul>
+ *
+ * <p>When null, this checkpoint represents ReAct execution (not procedure execution).
+ *
  * <h2>Durable Semantic Contract</h2>
  *
  * <p>This is a <strong>durable semantic contract</strong> - field changes affect checkpoint schema
@@ -44,6 +58,7 @@ import java.util.Objects;
  *   <li><strong>1.0</strong>: M5 original (no executionEpoch, no disposition)
  *   <li><strong>1.1</strong>: M6-T4F added executionEpoch (nullable)
  *   <li><strong>1.2</strong>: M6-T6.4 added disposition (nullable for legacy compatibility)
+ *   <li><strong>1.3</strong>: M8-D added procedureState (nullable)
  * </ul>
  *
  * @param schemaVersion checkpoint schema version (for evolution compatibility)
@@ -55,9 +70,11 @@ import java.util.Objects;
  * @param pendingBatch pending tool calls awaiting execution/approval (non-empty)
  * @param accumulatedEvidences execution evidence accumulated before suspension (immutable)
  * @param executionEpoch optional execution epoch for crash/restart detection (M6-T4F)
+ * @param procedureState optional procedure execution state (M8-D, null for ReAct execution)
  * @author lov3r
  * @since M5
  * @since M6-T6.4 disposition field added
+ * @since M8-D procedureState field added
  */
 public record SuspensionCheckpoint(
     String schemaVersion,
@@ -68,14 +85,15 @@ public record SuspensionCheckpoint(
     ContinuationDisposition disposition,
     List<PendingToolCall> pendingBatch,
     List<Evidence> accumulatedEvidences,
-    String executionEpoch) {
+    String executionEpoch,
+    ProcedureExecutionState procedureState) {
 
   /**
    * Current checkpoint schema version.
    *
-   * <p><strong>Schema 1.2</strong>: M6-T6.4 added disposition (self-describing continuation)
+   * <p><strong>Schema 1.3</strong>: M8-D added procedureState (nullable)
    */
-  public static final String CURRENT_SCHEMA_VERSION = "1.2";
+  public static final String CURRENT_SCHEMA_VERSION = "1.3";
 
   /**
    * Compact constructor with validation.
@@ -98,6 +116,7 @@ public record SuspensionCheckpoint(
     }
     // sessionId may be null for stateless execution
     // disposition may be null ONLY for legacy v1.0/v1.1 checkpoint compatibility
+    // procedureState may be null (null = ReAct execution, not procedure execution)
     // executionEpoch may be null for v1.0/v1.1 checkpoint compatibility
     if (pendingBatch == null || pendingBatch.isEmpty()) {
       throw new IllegalArgumentException("pendingBatch cannot be null or empty");
