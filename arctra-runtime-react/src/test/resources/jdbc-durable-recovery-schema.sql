@@ -1,5 +1,6 @@
 -- M6-T4E: JDBC Durable Recovery Store Pair Schema
 -- M6-T5: Physical Attempt Identity & Recovery Resolution
+-- M7: Recovery Control Plane Discovery
 --
 -- Target: PostgreSQL (production), H2 (tests)
 --
@@ -7,14 +8,19 @@
 -- This file is documentation and test fixture reference.
 
 -- Checkpoint storage
+-- M7: Added updated_at for operational discovery ordering
 CREATE TABLE arctra_checkpoints (
     process_id          VARCHAR(255) PRIMARY KEY,
     checkpoint_version  BIGINT NOT NULL,
     schema_version      VARCHAR(32) NOT NULL,
     runtime_binding_key VARCHAR(255) NOT NULL,
     session_id          VARCHAR(255),
-    checkpoint_data     TEXT NOT NULL
+    checkpoint_data     TEXT NOT NULL,
+    updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- M7: Index for operational discovery queries ordered by update time
+CREATE INDEX idx_checkpoints_updated ON arctra_checkpoints(updated_at);
 
 -- M6-T5: Invocation intent storage with attempt identity
 -- Migration from M6-T4: See migration notes below

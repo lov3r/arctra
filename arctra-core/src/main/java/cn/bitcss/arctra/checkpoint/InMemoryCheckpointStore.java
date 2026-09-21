@@ -1,9 +1,12 @@
 package cn.bitcss.arctra.checkpoint;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
 
 /**
  * In-memory checkpoint store with atomic CAS semantics.
@@ -20,6 +23,17 @@ import java.util.concurrent.ConcurrentMap;
 public class InMemoryCheckpointStore implements CheckpointStore {
 
   private final ConcurrentMap<String, SuspensionCheckpoint> store = new ConcurrentHashMap<>();
+
+  /**
+   * Expose internal store for test subclass verification.
+   *
+   * <p><strong>NOT PART OF PUBLIC API</strong> - for testing only.
+   *
+   * @return unmodifiable view of internal checkpoint store
+   */
+  protected java.util.Map<String, SuspensionCheckpoint> getCheckpoints() {
+    return java.util.Collections.unmodifiableMap(store);
+  }
 
   @Override
   public void create(SuspensionCheckpoint checkpoint) {
@@ -104,5 +118,23 @@ public class InMemoryCheckpointStore implements CheckpointStore {
         });
 
     return deleted[0];
+  }
+
+  // ========== M7: Discovery Operations ==========
+
+  @Override
+  public List<SuspensionCheckpoint> listContinuations() {
+    // Snapshot of current values
+    return new ArrayList<>(store.values());
+  }
+
+  @Override
+  public List<SuspensionCheckpoint> listContinuationsByDisposition(
+      ContinuationDisposition disposition) {
+    Objects.requireNonNull(disposition, "disposition cannot be null");
+
+    return store.values().stream()
+        .filter(checkpoint -> checkpoint.disposition() == disposition)
+        .collect(Collectors.toList());
   }
 }

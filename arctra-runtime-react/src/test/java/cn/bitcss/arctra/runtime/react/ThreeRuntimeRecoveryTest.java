@@ -7,8 +7,12 @@ import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.StaleCheckpointException;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.governance.GovernanceDecision;
 import cn.bitcss.arctra.governance.ToolGovernancePolicy;
@@ -80,7 +84,7 @@ class ThreeRuntimeRecoveryTest {
   @DisplayName("Three-runtime recovery: A suspend → B re-suspend → C complete")
   void threeRuntimeRecovery_suspendResumeResuspendResumeComplete() {
     // ========== SHARED INFRASTRUCTURE ==========
-    SharedCheckpointStore sharedStore = new SharedCheckpointStore();
+    CheckpointStore sharedStore = new InMemoryCheckpointStore();
     SharedChatMemory sharedMemory = new SharedChatMemory();
 
     // Pre-populate ChatMemory with history + user message
@@ -362,7 +366,7 @@ class ThreeRuntimeRecoveryTest {
   @Test
   @DisplayName("Stale version resume rejected after cross-runtime advance")
   void staleVersionAfterCrossRuntimeAdvance_rejectedBeforeSideEffects() {
-    SharedCheckpointStore sharedStore = new SharedCheckpointStore();
+    CheckpointStore sharedStore = new InMemoryCheckpointStore();
     SharedChatMemory sharedMemory = new SharedChatMemory();
 
     // Runtime A: suspend to v1
@@ -454,7 +458,7 @@ class ThreeRuntimeRecoveryTest {
   @Test
   @DisplayName("Old local handle becomes stale after cross-runtime advance")
   void oldLocalHandle_staleAfterCrossRuntimeAdvance() {
-    SharedCheckpointStore sharedStore = new SharedCheckpointStore();
+    CheckpointStore sharedStore = new InMemoryCheckpointStore();
     SharedChatMemory sharedMemory = new SharedChatMemory();
 
     // Runtime A: suspend
@@ -633,6 +637,20 @@ class ThreeRuntimeRecoveryTest {
         return true;
       }
       return false;
+    }
+
+    // M7: Discovery operations
+    @Override
+    public List<SuspensionCheckpoint> listContinuations() {
+      return new ArrayList<>(store.values());
+    }
+
+    @Override
+    public List<SuspensionCheckpoint> listContinuationsByDisposition(
+        ContinuationDisposition disposition) {
+      return store.values().stream()
+          .filter(c -> c.disposition() == disposition)
+          .toList();
     }
   }
 

@@ -7,7 +7,9 @@ import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.governance.GovernanceDecision;
 import cn.bitcss.arctra.governance.ToolGovernancePolicy;
@@ -69,7 +71,7 @@ class DurableLifecycleRegressionTest {
   @Test
   @DisplayName("Full lifecycle: Memory + Evidence + Governance")
   void fullLifecycle_memoryEvidenceGovernance() {
-    SharedCheckpointStore store = new SharedCheckpointStore();
+    CheckpointStore store = new InMemoryCheckpointStore();
     SharedChatMemory memory = new SharedChatMemory();
 
     // Pre-populate history
@@ -303,7 +305,7 @@ class DurableLifecycleRegressionTest {
   @Test
   @DisplayName("Rejection: no execution, no evidence")
   void rejection_noExecutionNoEvidence() {
-    SharedCheckpointStore store = new SharedCheckpointStore();
+    CheckpointStore store = new InMemoryCheckpointStore();
     SharedChatMemory memory = new SharedChatMemory();
 
     AtomicInteger governanceCount = new AtomicInteger(0);
@@ -403,7 +405,7 @@ class DurableLifecycleRegressionTest {
   @Test
   @DisplayName("Three episodes: Evidence [A, B, C]")
   void threeEpisodes_evidenceABC() {
-    SharedCheckpointStore store = new SharedCheckpointStore();
+    CheckpointStore store = new InMemoryCheckpointStore();
     SharedChatMemory memory = new SharedChatMemory();
 
     AtomicInteger toolACount = new AtomicInteger(0);
@@ -595,6 +597,20 @@ class DurableLifecycleRegressionTest {
             return current;
           });
       return deleted[0];
+    }
+
+    // M7: Discovery operations
+    @Override
+    public List<SuspensionCheckpoint> listContinuations() {
+      return new ArrayList<>(store.values());
+    }
+
+    @Override
+    public List<SuspensionCheckpoint> listContinuationsByDisposition(
+        ContinuationDisposition disposition) {
+      return store.values().stream()
+          .filter(c -> c.disposition() == disposition)
+          .toList();
     }
   }
 

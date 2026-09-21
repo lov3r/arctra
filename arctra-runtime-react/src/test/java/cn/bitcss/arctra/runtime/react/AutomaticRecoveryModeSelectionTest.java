@@ -7,10 +7,14 @@ import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.*;
 import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.execution.EventType;
 import cn.bitcss.arctra.execution.ExecutionEvent;
@@ -65,7 +69,7 @@ class AutomaticRecoveryModeSelectionTest {
   @DisplayName("T4F-1: Initial suspension stores current executionEpoch")
   void initialSuspension_storesCurrentExecutionEpoch() {
     // Given
-    TestCheckpointStore store = new TestCheckpointStore();
+    CheckpointStore store = new InMemoryCheckpointStore();
     ChatMemory memory = MessageWindowChatMemory.builder().maxMessages(10).build();
     AtomicInteger toolExecutionCount = new AtomicInteger(0);
 
@@ -123,7 +127,7 @@ class AutomaticRecoveryModeSelectionTest {
   @DisplayName("T4F-2: Multiple engines in same JVM share execution incarnation")
   void multipleEngines_shareExecutionIncarnation() {
     // Given - shared infrastructure
-    TestCheckpointStore store = new TestCheckpointStore();
+    CheckpointStore store = new InMemoryCheckpointStore();
     ChatMemory memory = MessageWindowChatMemory.builder().maxMessages(10).build();
     RuntimeBindingResolver resolver = createTestResolver();
 
@@ -183,7 +187,7 @@ class AutomaticRecoveryModeSelectionTest {
   void sameIncarnation_usesNormalPath() {
     // Given - recording store with NO intents
     RecordingInvocationStateStore stateStore = new RecordingInvocationStateStore();
-    TestCheckpointStore checkpointStore = new TestCheckpointStore();
+    CheckpointStore checkpointStore = new InMemoryCheckpointStore();
 
     // Create checkpoint with current epoch (SAME incarnation)
     String processId = "proc-test";
@@ -332,6 +336,19 @@ class AutomaticRecoveryModeSelectionTest {
       return true;
     }
 
+    // M7: Discovery operations
+    @Override
+    public List<SuspensionCheckpoint> listContinuations() {
+      return new ArrayList<>(checkpoints);
+    }
+
+    @Override
+    public List<SuspensionCheckpoint> listContinuationsByDisposition(
+        ContinuationDisposition disposition) {
+      return checkpoints.stream()
+          .filter(c -> c.disposition() == disposition)
+          .toList();
+    }
   }
 
   // Helper methods

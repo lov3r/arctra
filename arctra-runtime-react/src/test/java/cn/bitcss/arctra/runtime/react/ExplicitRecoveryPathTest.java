@@ -8,10 +8,14 @@ import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.*;
 import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import java.util.Optional;
 import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.execution.ExecutionEvent;
@@ -70,7 +74,7 @@ class ExplicitRecoveryPathTest {
             List.of(),
             "epoch-original");
 
-    TestCheckpointStore checkpointStore = new TestCheckpointStore();
+    CheckpointStore checkpointStore = new InMemoryCheckpointStore();
     checkpointStore.create(checkpoint);
 
     // Given - runtime binding
@@ -116,9 +120,9 @@ class ExplicitRecoveryPathTest {
         .containsExactlyInAnyOrder("proc-test:op-A", "proc-test:op-B");
 
     // Then - checkpoint deleted (CHECK B succeeded)
-    assertThat(checkpointStore.exists("proc-test"))
+    assertThat(checkpointStore.load("proc-test"))
         .as("Checkpoint should be deleted after successful execution")
-        .isFalse();
+        .isEmpty();
   }
 
   // Test 5: Explicit Recovery APPROVE, Uncertain Operation
@@ -144,7 +148,7 @@ class ExplicitRecoveryPathTest {
             List.of(),
             "epoch-original");
 
-    TestCheckpointStore checkpointStore = new TestCheckpointStore();
+    CheckpointStore checkpointStore = new InMemoryCheckpointStore();
     checkpointStore.create(checkpoint);
 
     RuntimeBindingResolver bindingResolver =
@@ -181,9 +185,9 @@ class ExplicitRecoveryPathTest {
         .isZero();
 
     // Then - checkpoint preserved (CHECK B not reached)
-    assertThat(checkpointStore.exists("proc-test"))
+    assertThat(checkpointStore.load("proc-test"))
         .as("Checkpoint must be preserved on uncertainty")
-        .isTrue();
+        .isPresent();
 
     assertThat(checkpointStore.load("proc-test").get().checkpointVersion())
         .as("Checkpoint version unchanged")
@@ -212,7 +216,7 @@ class ExplicitRecoveryPathTest {
             List.of(),
             "epoch-original");
 
-    TestCheckpointStore checkpointStore = new TestCheckpointStore();
+    CheckpointStore checkpointStore = new InMemoryCheckpointStore();
     checkpointStore.create(checkpoint);
 
     RuntimeBindingResolver bindingResolver =
@@ -247,9 +251,9 @@ class ExplicitRecoveryPathTest {
         .as("Order should not matter - ALL operations blocked")
         .isZero();
 
-    assertThat(checkpointStore.exists("proc-test"))
+    assertThat(checkpointStore.load("proc-test"))
         .as("Checkpoint preserved")
-        .isTrue();
+        .isPresent();
   }
 
   // Test 7: Recovery Read Failure
@@ -310,7 +314,7 @@ class ExplicitRecoveryPathTest {
             List.of(),
             "epoch-original");
 
-    TestCheckpointStore checkpointStore = new TestCheckpointStore();
+    CheckpointStore checkpointStore = new InMemoryCheckpointStore();
     checkpointStore.create(checkpoint);
 
     RuntimeBindingResolver bindingResolver =
@@ -352,9 +356,9 @@ class ExplicitRecoveryPathTest {
         .isEmpty();
 
     // Then - checkpoint preserved
-    assertThat(checkpointStore.exists("proc-test"))
+    assertThat(checkpointStore.load("proc-test"))
         .as("Checkpoint preserved on read failure")
-        .isTrue();
+        .isPresent();
   }
 
   // Test 8: REJECT With Existing Intent
@@ -379,7 +383,7 @@ class ExplicitRecoveryPathTest {
             List.of(),
             "epoch-original");
 
-    TestCheckpointStore checkpointStore = new TestCheckpointStore();
+    CheckpointStore checkpointStore = new InMemoryCheckpointStore();
     checkpointStore.create(checkpoint);
 
     RuntimeBindingResolver bindingResolver =
@@ -417,9 +421,9 @@ class ExplicitRecoveryPathTest {
         .isZero();
 
     // Then - checkpoint deleted (existing CHECK B behavior)
-    assertThat(checkpointStore.exists("proc-test"))
+    assertThat(checkpointStore.load("proc-test"))
         .as("REJECT deletes checkpoint per existing behavior")
-        .isFalse();
+        .isEmpty();
   }
 
   // Helper: Recording InvocationStateStore
@@ -513,6 +517,21 @@ class ExplicitRecoveryPathTest {
         return true;
       }
       return false;
+    }
+
+    // M7: Discovery operations
+    @Override
+    public List<SuspensionCheckpoint> listContinuations() {
+      return stored == null ? List.of() : List.of(stored);
+    }
+
+    @Override
+    public List<SuspensionCheckpoint> listContinuationsByDisposition(
+        ContinuationDisposition disposition) {
+      if (stored == null || stored.disposition() != disposition) {
+        return List.of();
+      }
+      return List.of(stored);
     }
 
     boolean exists(String processId) {

@@ -7,12 +7,18 @@ import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.CheckpointTransitionConflictException;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.StaleCheckpointException;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import static cn.bitcss.arctra.checkpoint.CheckpointTestHelper.*;
 import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
+import cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore;
 import cn.bitcss.arctra.governance.GovernanceDecision;
 import cn.bitcss.arctra.governance.ToolGovernancePolicy;
 import cn.bitcss.arctra.process.AgentProcess;
@@ -80,7 +86,7 @@ class ConcurrentDurableResumeTest {
   @Test
   @DisplayName("Same handle concurrent resume - only one backend invocation")
   void sameHandle_concurrentResume_onlyOneBackendInvocation() throws Exception {
-    SharedCheckpointStore store = new SharedCheckpointStore();
+    CheckpointStore store = new InMemoryCheckpointStore();
     SharedChatMemory memory = new SharedChatMemory();
 
     // Create suspended process
@@ -204,7 +210,7 @@ class ConcurrentDurableResumeTest {
   @Test
   @DisplayName("Cross-runtime completion race - one winner, one conflict")
   void crossRuntimeCompletionRace_oneWinnerOneConflict() throws Exception {
-    SharedCheckpointStore store = new SharedCheckpointStore();
+    CheckpointStore store = new InMemoryCheckpointStore();
     SharedChatMemory memory = new SharedChatMemory();
 
     // Pre-create checkpoint v1 with pending toolX
@@ -325,7 +331,7 @@ class ConcurrentDurableResumeTest {
   @Test
   @DisplayName("Cross-runtime re-suspension race - one winner, one conflict")
   void crossRuntimeReSuspensionRace_oneWinnerOneConflict() throws Exception {
-    SharedCheckpointStore store = new SharedCheckpointStore();
+    CheckpointStore store = new InMemoryCheckpointStore();
     SharedChatMemory memory = new SharedChatMemory();
 
     // Pre-create checkpoint v1 with pending toolX
@@ -417,7 +423,7 @@ class ConcurrentDurableResumeTest {
   @Test
   @DisplayName("Stale resume after race - rejected before side effects")
   void staleResumeAfterRace_rejectedBeforeSideEffects() throws Exception {
-    SharedCheckpointStore store = new SharedCheckpointStore();
+    CheckpointStore store = new InMemoryCheckpointStore();
     SharedChatMemory memory = new SharedChatMemory();
 
     // Initial checkpoint v1
@@ -494,7 +500,7 @@ class ConcurrentDurableResumeTest {
   @Test
   @DisplayName("Local handle after CHECK B conflict becomes FAILED")
   void localHandle_afterCheckBConflict_becomesFailed() throws Exception {
-    SharedCheckpointStore store = new SharedCheckpointStore();
+    CheckpointStore store = new InMemoryCheckpointStore();
     SharedChatMemory memory = new SharedChatMemory();
 
     // Runtime A: create initial suspended process
@@ -788,6 +794,20 @@ class ConcurrentDurableResumeTest {
             return current;
           });
       return deleted[0];
+    }
+
+    // M7: Discovery operations
+    @Override
+    public List<SuspensionCheckpoint> listContinuations() {
+      return new ArrayList<>(store.values());
+    }
+
+    @Override
+    public List<SuspensionCheckpoint> listContinuationsByDisposition(
+        ContinuationDisposition disposition) {
+      return store.values().stream()
+          .filter(c -> c.disposition() == disposition)
+          .toList();
     }
   }
 

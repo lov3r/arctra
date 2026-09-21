@@ -2,8 +2,10 @@ package cn.bitcss.arctra.runtime.react;
 
 import cn.bitcss.arctra.checkpoint.CheckpointAlreadyExistsException;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.runtime.react.persistence.CheckpointJsonCodec;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import javax.sql.DataSource;
@@ -39,9 +41,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *   schema_version      VARCHAR(32) NOT NULL,
  *   runtime_binding_key VARCHAR(255) NOT NULL,
  *   session_id          VARCHAR(255),
- *   checkpoint_data     TEXT NOT NULL
+ *   checkpoint_data     TEXT NOT NULL,
+ *   updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP  -- M7
  * );
+ *
+ * CREATE INDEX idx_checkpoints_updated ON arctra_checkpoints(updated_at);  -- M7
  * </pre>
+ *
+ * <p>M7 added {@code updated_at} for operational discovery ordering. Schema migration is
+ * application responsibility.
  *
  * <p>Schema initialization is application/deployment responsibility.
  *
@@ -88,8 +96,8 @@ public final class JdbcCheckpointStore implements CheckpointStore {
       jdbcTemplate.update(
           """
           INSERT INTO arctra_checkpoints
-            (process_id, checkpoint_version, schema_version, runtime_binding_key, session_id, checkpoint_data)
-          VALUES (?, ?, ?, ?, ?, ?)
+            (process_id, checkpoint_version, schema_version, runtime_binding_key, session_id, checkpoint_data, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
           """,
           checkpoint.processId(),
           checkpoint.checkpointVersion(),
@@ -147,7 +155,8 @@ public final class JdbcCheckpointStore implements CheckpointStore {
                 schema_version = ?,
                 runtime_binding_key = ?,
                 session_id = ?,
-                checkpoint_data = ?
+                checkpoint_data = ?,
+                updated_at = CURRENT_TIMESTAMP
             WHERE process_id = ?
               AND checkpoint_version = ?
             """,
@@ -189,5 +198,43 @@ public final class JdbcCheckpointStore implements CheckpointStore {
    */
   DataSource getDataSource() {
     return jdbcTemplate.getDataSource();
+  }
+
+  // ========== M7: Discovery Operations ==========
+
+  @Override
+  public List<SuspensionCheckpoint> listContinuations() {
+    return jdbcTemplate.query(
+        """
+        SELECT checkpoint_data
+        FROM arctra_checkpoints
+        ORDER BY updated_at ASC, process_id ASC
+        """,
+        (rs, rowNum) -> {
+          String json = rs.getString("checkpoint_data");
+          return codec.deserialize(json);
+        });
+  }
+
+  @Override
+  public List<SuspensionCheckpoint> listContinuationsByDisposition(
+      ContinuationDisposition disposition) {
+    Objects.requireNonNull(disposition, "disposition cannot be null");
+
+    // Note: disposition is inside checkpoint_data JSON, so we must deserialize and filter
+    // in-memory. Future optimization could extract disposition to a dedicated column.
+    return jdbcTemplate.query(
+            """
+            SELECT checkpoint_data
+            FROM arctra_checkpoints
+            ORDER BY updated_at ASC, process_id ASC
+            """,
+            (rs, rowNum) -> {
+              String json = rs.getString("checkpoint_data");
+              return codec.deserialize(json);
+            })
+        .stream()
+        .filter(checkpoint -> checkpoint.disposition() == disposition)
+        .toList();
   }
 }

@@ -860,5 +860,17 @@ class ToolEventWiringTest {
       // Proceed with CAS delete
       return delegate.deleteIfVersion(processId, expectedVersion);
     }
+
+    // M7: Discovery operations
+    @Override
+    public java.util.List<cn.bitcss.arctra.checkpoint.SuspensionCheckpoint> listContinuations() {
+      return delegate.listContinuations();
+    }
+
+    @Override
+    public java.util.List<cn.bitcss.arctra.checkpoint.SuspensionCheckpoint> listContinuationsByDisposition(
+        cn.bitcss.arctra.checkpoint.ContinuationDisposition disposition) {
+      return delegate.listContinuationsByDisposition(disposition);
+    }
   }
 }

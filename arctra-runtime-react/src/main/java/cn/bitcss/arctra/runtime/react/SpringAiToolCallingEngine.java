@@ -294,17 +294,26 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
   /**
    * Create matching InvocationStateStore paired with CheckpointStore.
    *
-   * <p><strong>M6-T4E: Official JDBC Pairing</strong>
+   * <p><strong>M6 V1 Durable Capability Contract:</strong>
    *
-   * <p>If CheckpointStore is JdbcCheckpointStore, creates matching JdbcInvocationStateStore
-   * sharing the same DataSource. This ensures restart-durable recovery substrate coherence.
-   *
-   * <p><strong>Unknown/custom CheckpointStore:</strong> Falls back to InMemoryInvocationStateStore.
-   * This configuration is execution-compatible but does NOT provide restart-durable recovery
-   * guarantees.
+   * <ul>
+   *   <li><strong>Ephemeral mode (checkpointStore == null):</strong> Returns
+   *       InMemoryInvocationStateStore for in-process execution.
+   *   <li><strong>JDBC persistent mode:</strong> Pairs JdbcCheckpointStore with
+   *       JdbcInvocationStateStore sharing the same DataSource. This ensures restart-durable
+   *       recovery substrate coherence.
+   *   <li><strong>InMemory test mode:</strong> Pairs InMemoryCheckpointStore with
+   *       InMemoryInvocationStateStore. This is for testing only and does NOT provide
+   *       restart-durable guarantees.
+   *   <li><strong>Unsupported custom CheckpointStore:</strong> Throws IllegalArgumentException.
+   *       Custom durable persistence providers are not supported in V1 because restart-safe DURABLE
+   *       execution requires a matching persistent InvocationStateStore for T5 recovery
+   *       classification.
+   * </ul>
    *
    * @param checkpointStore the configured checkpoint store (may be null for ephemeral)
    * @return matching invocation state store
+   * @throws IllegalArgumentException if checkpointStore is a non-JDBC/non-InMemory persistent implementation
    * @since M6-T4E
    */
   private InvocationStateStore createMatchingInvocationStateStore(
@@ -320,11 +329,21 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
       return new JdbcInvocationStateStore(jdbcStore.getDataSource());
     }
 
-    // Unknown/custom checkpoint store - safe fallback to in-memory
-    // NOTE: This means custom persistent CheckpointStore implementations
-    // will NOT get restart-durable recovery guarantees unless explicitly
-    // paired through future configuration mechanism
-    return new InMemoryInvocationStateStore();
+    if (checkpointStore instanceof cn.bitcss.arctra.checkpoint.InMemoryCheckpointStore) {
+      // Test-only mode - in-memory pairing for same-process testing
+      // NOT restart-durable
+      return new InMemoryInvocationStateStore();
+    }
+
+    // M6 V1 freeze: Unsupported custom persistent CheckpointStore
+    // Fail-fast instead of silently downgrading to InMemory
+    throw new IllegalArgumentException(
+        "Unsupported CheckpointStore for restart-safe DURABLE execution. "
+            + "Arctra V1 supports JdbcCheckpointStore because durable execution requires "
+            + "a matching persistent InvocationStateStore for recovery classification. "
+            + "Custom durable persistence providers are not supported by the current V1 runtime. "
+            + "Provided: "
+            + checkpointStore.getClass().getName());
   }
 
   /**

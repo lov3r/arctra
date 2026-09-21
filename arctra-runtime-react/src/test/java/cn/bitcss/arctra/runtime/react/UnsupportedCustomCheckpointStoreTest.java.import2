@@ -1,0 +1,131 @@
+package cn.bitcss.arctra.runtime.react;
+
+import static org.assertj.core.api.Assertions.*;
+
+import cn.bitcss.arctra.checkpoint.CheckpointStore;
+import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
+import cn.bitcss.arctra.governance.ToolGovernancePolicy;
+import cn.bitcss.arctra.runtime.RuntimeBindingResolver;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.Prompt;
+
+/**
+ * M6 V1 Durable Capability Enforcement Tests.
+ *
+ * <p>Verifies that custom/unsupported persistent CheckpointStore implementations are rejected
+ * during engine construction to prevent silent durability downgrade.
+ *
+ * <p><strong>M6 Durable Contract:</strong> DURABLE execution requires restart-safe persistent
+ * CheckpointStore + InvocationStateStore pairing. V1 officially supports only JDBC. Custom
+ * persistent stores must fail-fast instead of silently falling back to InMemory.
+ *
+ * @author lov3r
+ * @since M6-FINAL
+ */
+@DisplayName("M6 V1: Unsupported Custom CheckpointStore Enforcement")
+class UnsupportedCustomCheckpointStoreTest {
+
+  /**
+   * Custom CheckpointStore implementation for testing rejection behavior.
+   *
+   * <p>This represents a user-provided persistent CheckpointStore that Arctra V1 cannot pair with
+   * a matching persistent InvocationStateStore.
+   */
+  private static class CustomPersistentCheckpointStore implements CheckpointStore {
+    @Override
+    public void create(SuspensionCheckpoint checkpoint) {}
+
+    @Override
+    public Optional<SuspensionCheckpoint> load(String processId) {
+      return Optional.empty();
+    }
+
+    @Override
+    public boolean deleteIfVersion(String processId, long expectedVersion) {
+      return false;
+    }
+
+    @Override
+    public boolean replaceIfVersion(
+        String processId, long expectedVersion, SuspensionCheckpoint newCheckpoint) {
+      return false;
+    }
+
+    // M7: Discovery operations
+    @Override
+    public List<SuspensionCheckpoint> listContinuations() {
+      return List.of();
+    }
+
+    @Override
+    public List<SuspensionCheckpoint> listContinuationsByDisposition(
+        ContinuationDisposition disposition) {
+      return List.of();
+    }
+  }
+
+  @Test
+  @DisplayName("Custom persistent CheckpointStore → fail-fast during engine construction")
+  void customCheckpointStore_failsFast() {
+    // Arrange
+    CheckpointStore customStore = new CustomPersistentCheckpointStore();
+    ChatModel model = createSimpleModel();
+    ChatMemory memory = MessageWindowChatMemory.builder().maxMessages(100).build();
+    RuntimeBindingResolver resolver = (pid, key, sid) -> null;
+
+    // Act & Assert
+    assertThatThrownBy(
+            () ->
+                new SpringAiToolCallingEngine(
+                    model,
+                    List.of(),
+                    memory,
+                    ToolGovernancePolicy.allowAll(),
+                    customStore,
+                    resolver,
+                    "test-key"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Unsupported CheckpointStore")
+        .hasMessageContaining("restart-safe DURABLE execution")
+        .hasMessageContaining("JdbcCheckpointStore")
+        .hasMessageContaining("CustomPersistentCheckpointStore");
+  }
+
+  @Test
+  @DisplayName("EPHEMERAL (null CheckpointStore) → succeeds")
+  void ephemeralMode_succeeds() {
+    // Arrange
+    ChatModel model = createSimpleModel();
+    ChatMemory memory = MessageWindowChatMemory.builder().maxMessages(100).build();
+
+    // Act & Assert - should not throw
+    assertThatCode(
+            () ->
+                new SpringAiToolCallingEngine(
+                    model, List.of(), memory, ToolGovernancePolicy.allowAll()))
+        .doesNotThrowAnyException();
+  }
+
+  private static ChatModel createSimpleModel() {
+    return new ChatModel() {
+      @Override
+      public ChatResponse call(Prompt prompt) {
+        return new ChatResponse(
+            List.of(
+                new Generation(
+                    org.springframework.ai.chat.messages.AssistantMessage.builder()
+                        .content("Test response")
+                        .build())));
+      }
+    };
+  }
+}
+
