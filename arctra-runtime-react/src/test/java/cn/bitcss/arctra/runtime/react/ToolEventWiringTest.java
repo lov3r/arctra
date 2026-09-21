@@ -739,7 +739,9 @@ class ToolEventWiringTest {
         checkpointStore,
         bindingResolver,
         BINDING_KEY,
-        executionLedger);
+        executionLedger,
+        null, // M8: procedureMatcher
+        null); // M8: procedureExecutionHandler
   }
 
   private SpringAiToolCallingEngine createEngineWithCustomModel(
@@ -755,7 +757,9 @@ class ToolEventWiringTest {
         checkpointStore,
         bindingResolver,
         BINDING_KEY,
-        executionLedger);
+        executionLedger,
+        null, // M8: procedureMatcher
+        null); // M8: procedureExecutionHandler
   }
 
   private SpringAiToolCallingEngine createEngineWithCustomStore(
@@ -775,7 +779,9 @@ class ToolEventWiringTest {
         customStore,
         bindingResolver,
         BINDING_KEY,
-        customLedger);
+        customLedger,
+        null, // M8: procedureMatcher
+        null); // M8: procedureExecutionHandler
   }
 
   private ChatModel createCompletingChatModel() {

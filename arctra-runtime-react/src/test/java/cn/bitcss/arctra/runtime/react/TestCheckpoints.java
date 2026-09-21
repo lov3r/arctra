@@ -113,7 +113,8 @@ public final class TestCheckpoints {
         ContinuationDisposition.WAITING_FOR_SIGNAL, // M6-T6.4: default to WAITING
         pendingBatch,
         List.of(),
-        ExecutionIncarnation.current()); // M6-T4F: current epoch
+        ExecutionIncarnation.current(),
+        null); // M6-T4F: current epoch
   }
 
   /**
@@ -139,7 +140,7 @@ public final class TestCheckpoints {
         ContinuationDisposition.WAITING_FOR_SIGNAL, // M6-T6.4: default to WAITING
         pendingBatch,
         List.of(),
-        ExecutionIncarnation.current()); // M6-T4F
+        ExecutionIncarnation.current(), null); // M6-T4F
   }
 
   /**
@@ -170,7 +171,7 @@ public final class TestCheckpoints {
         ContinuationDisposition.WAITING_FOR_SIGNAL,
         pendingBatch,
         List.of(),
-        ExecutionIncarnation.current()); // M6-T4F
+        ExecutionIncarnation.current(), null); // M6-T4F
   }
 
   /**
@@ -236,7 +237,7 @@ public final class TestCheckpoints {
         ContinuationDisposition.WAITING_FOR_SIGNAL,
         List.of(new PendingToolCall(testOperationId(0), "tc-dummy", "dummyTool", "{}")),
         evidences,
-        ExecutionIncarnation.current()); // M6-T4F
+        ExecutionIncarnation.current(), null); // M6-T4F
   }
 
   /**
@@ -261,6 +262,7 @@ public final class TestCheckpoints {
         ContinuationDisposition.WAITING_FOR_SIGNAL,
         List.of(new PendingToolCall(testOperationId(0), "tc-dummy", "dummyTool", "{}")),
         List.of(),
-        executionEpoch);
+        executionEpoch,
+        null);
   }
 }

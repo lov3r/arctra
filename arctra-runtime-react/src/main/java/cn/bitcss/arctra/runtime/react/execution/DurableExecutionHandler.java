@@ -11,6 +11,7 @@ import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.execution.EventType;
 import cn.bitcss.arctra.execution.ExecutionEvent;
 import cn.bitcss.arctra.execution.ExecutionEventListener;
+import cn.bitcss.arctra.procedure.ProcedureExecutionState;
 import cn.bitcss.arctra.process.AgentProcess;
 import cn.bitcss.arctra.runtime.ProcessFactory;
 import cn.bitcss.arctra.runtime.react.durable.ExecutionIncarnation;
@@ -249,7 +250,8 @@ public class DurableExecutionHandler implements ExecutionHandler {
             disposition,
             pendingBatch,
             List.copyOf(evidences), // Defensive copy
-            ExecutionIncarnation.current());
+            ExecutionIncarnation.current(),
+            (ProcedureExecutionState) null); // M8-Integration: procedureState
 
     // 5. Persist checkpoint FIRST (durability-first)
     try {

@@ -11,6 +11,7 @@ import cn.bitcss.arctra.evidence.Evidence;
 import cn.bitcss.arctra.execution.EventType;
 import cn.bitcss.arctra.execution.ExecutionEvent;
 import cn.bitcss.arctra.execution.ExecutionEventListener;
+import cn.bitcss.arctra.procedure.ProcedureExecutionState;
 import cn.bitcss.arctra.process.AgentProcess;
 import cn.bitcss.arctra.process.ContinuationSignal;
 import cn.bitcss.arctra.recovery.RecoveryUncertaintyException;
@@ -643,7 +644,8 @@ public final class DurableResumeCoordinator {
             ContinuationDisposition.WAITING_FOR_SIGNAL, // M6-T6.4: re-suspended awaiting approval
             suspended.pendingBatch(),
             suspended.evidences(),
-            ExecutionIncarnation.current()); // M6-T4F: rollover to current
+            ExecutionIncarnation.current(), // M6-T4F: rollover to current
+            (ProcedureExecutionState) null); // M8-Integration: procedureState
 
     // CHECK B: Replace checkpoint (CAS)
     boolean replaced =

@@ -31,6 +31,9 @@ import cn.bitcss.arctra.runtime.react.governance.GovernanceToolCallingAdvisor;
 import cn.bitcss.arctra.runtime.react.protocol.SpringAiResumedExecutionHandler;
 import cn.bitcss.arctra.runtime.react.protocol.ToolApprovalRequiredSignal;
 import cn.bitcss.arctra.runtime.react.tool.EvidenceCapturingToolCallback;
+import cn.bitcss.arctra.procedure.ProcedureExecutionHandler;
+import cn.bitcss.arctra.procedure.ReusableProcedure;
+import cn.bitcss.arctra.procedure.SimpleProcedureMatcher;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -91,6 +94,10 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
   // M6-T6.4 Model continuation executor (unified ChatClient execution)
   private final ModelContinuationExecutor modelContinuationExecutor;
 
+  // M8-Integration components (optional - null when not configured)
+  private final SimpleProcedureMatcher procedureMatcher;
+  private final ProcedureExecutionHandler procedureExecutionHandler;
+
   /**
    * Create a tool-calling engine with conversation memory and governance support (M4 ephemeral).
    *
@@ -104,14 +111,14 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
       List<ToolCallback> tools,
       ChatMemory chatMemory,
       ToolGovernancePolicy governancePolicy) {
-    this(chatModel, tools, chatMemory, governancePolicy, null, null, null, null);
+    this(chatModel, tools, chatMemory, governancePolicy, null, null, null, null, null, null);
   }
 
   /**
    * Create a tool-calling engine with durable suspension capability (M5 backward compatibility).
    *
    * <p>This constructor exists for backward compatibility with M5 tests. New code should use the
-   * 8-parameter constructor with explicit ExecutionLedger parameter.
+   * 10-parameter constructor with explicit ExecutionLedger and M8 components.
    *
    * @param chatModel the chat model
    * @param tools the tools available
@@ -122,7 +129,7 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
    * @param runtimeBindingKey logical binding key for this engine (null for ephemeral)
    * @throws IllegalArgumentException if durable configuration is partial
    * @since M5-T4
-   * @deprecated Use 8-parameter constructor with explicit ExecutionLedger parameter
+   * @deprecated Use 10-parameter constructor with explicit ExecutionLedger and M8 components
    */
   @Deprecated
   public SpringAiToolCallingEngine(
@@ -134,17 +141,21 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
       RuntimeBindingResolver bindingResolver,
       String runtimeBindingKey) {
     this(chatModel, tools, chatMemory, governancePolicy, checkpointStore, bindingResolver,
-         runtimeBindingKey, null);
+         runtimeBindingKey, null, null, null);
   }
 
   /**
-   * Create a tool-calling engine with durable suspension capability (M5).
+   * Create a tool-calling engine with durable suspension capability (M5 + M8).
    *
    * <p><strong>Durable configuration (all-or-nothing):</strong> Either all three durable
    * parameters are provided, or all are null for ephemeral-only mode.
    *
    * <p><strong>Execution ledger (optional):</strong> ExecutionLedger may be provided independently
    * for audit trail. If null, no execution events are recorded.
+   *
+   * <p><strong>M8 execution path learning (optional):</strong> If procedureMatcher and
+   * procedureExecutionHandler are provided, the engine will attempt to match and execute cached
+   * procedures before falling back to ReAct.
    *
    * @param chatModel the chat model
    * @param tools the tools available
@@ -154,8 +165,10 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
    * @param bindingResolver runtime binding resolver for recovery (null for ephemeral)
    * @param runtimeBindingKey logical binding key for this engine (null for ephemeral)
    * @param executionLedger execution ledger for audit trail (null to disable)
-   * @throws IllegalArgumentException if durable configuration is partial
-   * @since M5-T4
+   * @param procedureMatcher M8 procedure matcher (null to disable cached execution)
+   * @param procedureExecutionHandler M8 procedure execution handler (null to disable cached execution)
+   * @throws IllegalArgumentException if durable configuration is partial or M8 configuration is partial
+   * @since M5-T4 (M8-Integration)
    */
   public SpringAiToolCallingEngine(
       ChatModel chatModel,
@@ -165,7 +178,9 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
       CheckpointStore checkpointStore,
       RuntimeBindingResolver bindingResolver,
       String runtimeBindingKey,
-      ExecutionLedger executionLedger) {
+      ExecutionLedger executionLedger,
+      SimpleProcedureMatcher procedureMatcher,
+      ProcedureExecutionHandler procedureExecutionHandler) {
 
     this.chatModel = Objects.requireNonNull(chatModel, "chatModel cannot be null");
     this.tools = Objects.requireNonNull(tools, "tools cannot be null");
@@ -193,6 +208,24 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
     this.checkpointStore = checkpointStore;
     this.bindingResolver = bindingResolver;
     this.runtimeBindingKey = runtimeBindingKey;
+
+    // M8-Integration: Validate M8 configuration (all-or-nothing)
+    boolean hasMatcher = procedureMatcher != null;
+    boolean hasHandler = procedureExecutionHandler != null;
+
+    if (hasMatcher || hasHandler) {
+      if (!hasMatcher || !hasHandler) {
+        throw new IllegalArgumentException(
+            "Partial M8 configuration rejected. M8 execution path learning requires both "
+                + "procedureMatcher and procedureExecutionHandler. Got: procedureMatcher="
+                + (hasMatcher ? "present" : "null")
+                + ", procedureExecutionHandler="
+                + (hasHandler ? "present" : "null"));
+      }
+    }
+
+    this.procedureMatcher = procedureMatcher;
+    this.procedureExecutionHandler = procedureExecutionHandler;
 
     // M6-T2B.1: adapt ExecutionLedger to ExecutionEventListener once at construction
       // M6-T2B.1 execution event sink (always non-null)
@@ -362,6 +395,37 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
   public AgentResult execute(
       AgentDefinition definition, AgentRequest request, AgentExecutionContext context) {
 
+    // M8-Integration: Attempt procedure matching if M8 components are configured
+    if (procedureMatcher != null && procedureExecutionHandler != null) {
+      String agentName = definition.name();
+      String userPrompt = request.userMessage();
+
+      var matchedProcedure = procedureMatcher.findMatch(agentName, userPrompt);
+
+      if (matchedProcedure.isPresent()) {
+        // Execute cached procedure path
+        return executeCachedProcedure(matchedProcedure.get(), definition, request, context);
+      }
+    }
+
+    // No match or M8 not configured - fall through to ReAct
+    return executeReActPath(definition, request, context);
+  }
+
+  /**
+   * Execute standard ReAct path (M8-Integration helper).
+   *
+   * <p>Extracted from original execute() to enable routing decision between cached and ReAct paths.
+   *
+   * @param definition agent definition
+   * @param request agent request
+   * @param context execution context
+   * @return execution result
+   * @since M8-Integration
+   */
+  private AgentResult executeReActPath(
+      AgentDefinition definition, AgentRequest request, AgentExecutionContext context) {
+
     // Create ToolCallingManager for Spring AI tool execution mechanics
     var toolCallingManager = ToolCallingManager.builder().build();
 
@@ -401,6 +465,141 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
       // Cleanup thread-local state
       governanceAdvisor.clearState();
     }
+  }
+
+  /**
+   * Execute cached procedure path (M8-Integration).
+   *
+   * <p>Executes a matched procedure step-by-step using ProcedureExecutionHandler.
+   *
+   * <p><strong>V1 Execution Flow:</strong>
+   *
+   * <ol>
+   *   <li>Initialize ProcedureExecutionState with empty inputs (V1 simplification)
+   *   <li>Loop: executeNextStep() → execute tool → advanceAfterSuccess()
+   *   <li>If REQUIRE_APPROVAL → suspend with checkpoint (TODO)
+   *   <li>If DENY → mark procedure INVALID and fall back to ReAct
+   *   <li>If completed → return success result
+   * </ol>
+   *
+   * <p><strong>V1 Limitations:</strong>
+   *
+   * <ul>
+   *   <li>No input binding from user prompt (all parameters use INPUT binding with empty map)
+   *   <li>No checkpoint creation for REQUIRE_APPROVAL (deferred to Phase 3.4)
+   *   <li>No evidence capture from cached execution
+   *   <li>Procedure marked INVALID on any governance denial or execution error
+   * </ul>
+   *
+   * @param procedure matched procedure to execute
+   * @param definition agent definition
+   * @param request agent request
+   * @param context execution context
+   * @return execution result
+   * @since M8-Integration
+   */
+  private AgentResult executeCachedProcedure(
+      ReusableProcedure procedure,
+      AgentDefinition definition,
+      AgentRequest request,
+      AgentExecutionContext context) {
+
+    // V1 simplification: empty input bindings
+    // TODO M8-E: Extract actual inputs from user prompt
+    var executionState = cn.bitcss.arctra.procedure.ProcedureExecutionState.initial(
+        procedure.procedureId(), procedure.revision(), java.util.Map.of());
+
+    try {
+      // Execute steps sequentially
+      while (!executionState.isComplete(procedure.steps().size())) {
+        var stepResult = procedureExecutionHandler.executeNextStep(procedure, executionState);
+
+        if (stepResult.isCompleted()) {
+          break;
+        }
+
+        if (stepResult.requiresApproval()) {
+          // TODO Phase 3.4: Create checkpoint and suspend
+          // For now, mark procedure as invalid and fall back to ReAct
+          // This indicates governance policy changed since procedure was learned
+          markProcedureInvalid(procedure, "REQUIRE_APPROVAL not yet implemented");
+          return executeReActPath(definition, request, context);
+        }
+
+        if (!stepResult.isAllowed()) {
+          // Should not reach here - DENY throws exception in executeNextStep
+          throw new IllegalStateException("Unexpected step result: not ALLOWED, not REQUIRE_APPROVAL, not COMPLETED");
+        }
+
+        // Execute the approved tool call
+        var pendingCall = stepResult.pendingCall();
+        String toolResult = executeToolDirectly(pendingCall, context);
+
+        // Advance state with captured output
+        var currentStep = procedure.steps().get(executionState.currentStepIndex());
+        executionState = procedureExecutionHandler.advanceAfterSuccess(
+            executionState, currentStep, toolResult);
+      }
+
+      // All steps completed successfully
+      return new AgentResult(
+          "Procedure executed successfully (cached path)",
+          List.of()); // V1: no evidence capture, no process (completed)
+
+    } catch (cn.bitcss.arctra.procedure.ProcedureGovernanceException e) {
+      // Governance policy changed - procedure no longer valid
+      // Mark as INVALID and fall back to ReAct
+      markProcedureInvalid(procedure, "Governance denial: " + e.getMessage());
+      return executeReActPath(definition, request, context);
+
+    } catch (Exception e) {
+      // Any other error - mark procedure invalid and fall back
+      markProcedureInvalid(procedure, "Execution failed: " + e.getMessage());
+      return executeReActPath(definition, request, context);
+    }
+  }
+
+  /**
+   * Execute tool directly without ReAct loop (M8-Integration helper).
+   *
+   * <p>V1 simplification: Executes tool synchronously without model interaction.
+   *
+   * @param pendingCall pending tool call
+   * @param context execution context
+   * @return tool result (JSON string)
+   * @since M8-Integration
+   */
+  private String executeToolDirectly(
+      cn.bitcss.arctra.checkpoint.PendingToolCall pendingCall,
+      AgentExecutionContext context) {
+
+    // Find matching tool
+    var tool = tools.stream()
+        .filter(t -> t.getToolDefinition().name().equals(pendingCall.toolName()))
+        .findFirst()
+        .orElseThrow(() -> new IllegalStateException(
+            "Tool not found: " + pendingCall.toolName()));
+
+    // Execute tool
+    String result = tool.call(pendingCall.arguments());
+
+    return result != null ? result : "{}";
+  }
+
+  /**
+   * Mark procedure as INVALID due to execution failure (M8-Integration helper).
+   *
+   * <p>V1 simplification: Only logs the invalidation. Store update deferred to Phase 4.
+   *
+   * @param procedure procedure to mark invalid
+   * @param reason invalidation reason
+   * @since M8-Integration
+   */
+  private void markProcedureInvalid(ReusableProcedure procedure, String reason) {
+    // TODO Phase 4: Update store with INVALID status
+    // For now, just log
+    System.err.println("M8: Marking procedure INVALID: " + procedure.procedureId()
+        + " rev " + procedure.revision() + " - " + reason);
   }
 
   // M6-T6.4: Old suspension methods removed - logic moved to execution components

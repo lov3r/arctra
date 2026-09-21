@@ -127,7 +127,9 @@ public final class TestEngines {
         new InMemoryCheckpointStore(),
         TestBindings.standardResolver(),
         "test-binding-key",
-        ledger);
+        ledger,
+        null, // M8: procedureMatcher
+        null); // M8: procedureExecutionHandler
   }
 
   /**

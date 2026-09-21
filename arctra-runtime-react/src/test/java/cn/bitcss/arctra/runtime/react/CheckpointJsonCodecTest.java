@@ -42,7 +42,8 @@ class CheckpointJsonCodecTest {
             List.of(
                 new Evidence("query_logs", "Found 42 errors"),
                 new Evidence("get_deployment", "Deployment v1.2.3")),
-            "test-epoch");
+            "test-epoch",
+            null);
 
     String json = codec.serialize(original);
     SuspensionCheckpoint deserialized = codec.deserialize(json);
@@ -62,7 +63,9 @@ class CheckpointJsonCodecTest {
             null, // nullable sessionId
             ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-x", "tc-x", "tool", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch",
+            null);
 
     String json = codec.serialize(withNull);
     SuspensionCheckpoint deserialized = codec.deserialize(json);
@@ -85,7 +88,9 @@ class CheckpointJsonCodecTest {
             "session",
             ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall(operationId, "tc-1", "tool", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch",
+            null);
 
     String json = codec.serialize(checkpoint);
     SuspensionCheckpoint deserialized = codec.deserialize(json);
@@ -107,7 +112,9 @@ class CheckpointJsonCodecTest {
             "session",
             ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-1", toolCallId, "tool", "{}")),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch",
+            null);
 
     String json = codec.serialize(checkpoint);
     SuspensionCheckpoint deserialized = codec.deserialize(json);
@@ -129,7 +136,9 @@ class CheckpointJsonCodecTest {
             "session",
             ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-1", "tc-1", "query", arguments)),
-            List.of(), "test-epoch");
+            List.of(),
+            "test-epoch",
+            null);
 
     String json = codec.serialize(checkpoint);
     SuspensionCheckpoint deserialized = codec.deserialize(json);
@@ -152,7 +161,8 @@ class CheckpointJsonCodecTest {
             ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.of(evidence),
-            "test-epoch");
+            "test-epoch",
+            null);
 
     String json = codec.serialize(checkpoint);
     SuspensionCheckpoint deserialized = codec.deserialize(json);
@@ -170,7 +180,7 @@ class CheckpointJsonCodecTest {
             new PendingToolCall("op-3", "tc-3", "tool-c", "{}"));
 
     SuspensionCheckpoint checkpoint =
-        new SuspensionCheckpoint("1.0", "proc-1", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, pending, List.of(), "test-epoch");
+        new SuspensionCheckpoint("1.0", "proc-1", 1L, "key", "session", ContinuationDisposition.WAITING_FOR_SIGNAL, pending, List.of(), "test-epoch", null);
 
     String json = codec.serialize(checkpoint);
     SuspensionCheckpoint deserialized = codec.deserialize(json);
@@ -191,7 +201,8 @@ class CheckpointJsonCodecTest {
             ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("op-1", "tc-1", "tool", "{}")),
             List.of(),
-            "test-epoch"); // empty evidences
+            "test-epoch",
+            null); // empty evidences
 
     String json = codec.serialize(checkpoint);
     SuspensionCheckpoint deserialized = codec.deserialize(json);

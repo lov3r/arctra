@@ -116,10 +116,10 @@ class AutomaticRecoveryModeSelectionTest {
         .as("executionEpoch should be UUID format")
         .matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 
-    // Then - schema version is 1.2 (M6-T6.4: includes disposition)
+    // Then - schema version is 1.3 (M8: includes procedureState)
     assertThat(checkpoint.schemaVersion())
-        .as("Schema version should be 1.2")
-        .isEqualTo("1.2");
+        .as("Schema version should be 1.3")
+        .isEqualTo("1.3");
   }
 
   // Test 2: Multiple Engine instances in same ClassLoader share incarnation
@@ -178,7 +178,7 @@ class AutomaticRecoveryModeSelectionTest {
     // Then - both checkpoints should have same executionEpoch
     assertThat(checkpointA.executionEpoch())
         .as("Different Engine instances in same JVM should share executionEpoch")
-        .isEqualTo(ExecutionIncarnation.current());
+        .isEqualTo(ExecutionIncarnation.current(), null);
   }
 
   // Test 3: Same-incarnation resume uses normal path
@@ -203,7 +203,7 @@ class AutomaticRecoveryModeSelectionTest {
             ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(operation),
             List.of(),
-            ExecutionIncarnation.current()); // SAME incarnation
+            ExecutionIncarnation.current(), null); // SAME incarnation
 
     checkpointStore.create(checkpoint);
 

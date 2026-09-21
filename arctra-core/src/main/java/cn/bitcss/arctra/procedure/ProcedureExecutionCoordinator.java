@@ -229,7 +229,7 @@ class ProcedureExecutionCoordinator {
   }
 
   /** 步骤执行结果。 */
-  static class StepExecutionResult {
+  public static class StepExecutionResult {
     private final ResultType type;
     private final PendingToolCall pendingCall; // nullable
 
@@ -238,42 +238,42 @@ class ProcedureExecutionCoordinator {
       this.pendingCall = pendingCall;
     }
 
-    static StepExecutionResult allowed(PendingToolCall pendingCall) {
+    public static StepExecutionResult allowed(PendingToolCall pendingCall) {
       return new StepExecutionResult(ResultType.ALLOWED, pendingCall);
     }
 
-    static StepExecutionResult requiresApproval(PendingToolCall pendingCall) {
+    public static StepExecutionResult requiresApproval(PendingToolCall pendingCall) {
       return new StepExecutionResult(ResultType.REQUIRES_APPROVAL, pendingCall);
     }
 
-    static StepExecutionResult completed() {
+    public static StepExecutionResult completed() {
       return new StepExecutionResult(ResultType.COMPLETED, null);
     }
 
-    ResultType type() {
+    public ResultType type() {
       return type;
     }
 
-    PendingToolCall pendingCall() {
+    public PendingToolCall pendingCall() {
       if (pendingCall == null) {
         throw new IllegalStateException("No pending call for result type: " + type);
       }
       return pendingCall;
     }
 
-    boolean isCompleted() {
+    public boolean isCompleted() {
       return type == ResultType.COMPLETED;
     }
 
-    boolean isAllowed() {
+    public boolean isAllowed() {
       return type == ResultType.ALLOWED;
     }
 
-    boolean requiresApproval() {
+    public boolean requiresApproval() {
       return type == ResultType.REQUIRES_APPROVAL;
     }
 
-    enum ResultType {
+    public enum ResultType {
       ALLOWED,
       REQUIRES_APPROVAL,
       COMPLETED

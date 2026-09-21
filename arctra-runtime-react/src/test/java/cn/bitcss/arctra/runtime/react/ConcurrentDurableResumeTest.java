@@ -223,7 +223,7 @@ class ConcurrentDurableResumeTest {
             SESSION_ID,
             ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolX", "{}")),
-            List.of(), "test-epoch");
+            List.of(), "test-epoch", null);
     store.create(cp1);
 
     // Two runtimes with independent resources
@@ -344,7 +344,7 @@ class ConcurrentDurableResumeTest {
             SESSION_ID,
             ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolX", "{}")),
-            List.of(), "test-epoch");
+            List.of(), "test-epoch", null);
     store.create(cp1);
 
     // Two runtimes - both emit new toolY requiring approval
@@ -436,7 +436,7 @@ class ConcurrentDurableResumeTest {
             SESSION_ID,
             ContinuationDisposition.WAITING_FOR_SIGNAL,
             List.of(new PendingToolCall("test-op-X", "tc-1", "toolX", "{}")),
-            List.of(), "test-epoch");
+            List.of(), "test-epoch", null);
     store.create(cp1);
 
     // Runtime A wins race: v1 → v2

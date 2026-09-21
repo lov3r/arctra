@@ -4,6 +4,7 @@ import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
 import cn.bitcss.arctra.checkpoint.PendingToolCall;
 import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.evidence.Evidence;
+import cn.bitcss.arctra.procedure.ProcedureExecutionState;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -180,7 +181,8 @@ public final class CheckpointJsonCodec {
           disposition, // M6-T6.4: nullable for legacy compatibility
           pendingBatch,
           accumulatedEvidences,
-          executionEpoch);
+          executionEpoch,
+          (ProcedureExecutionState) null); // M8-Integration: procedureState
 
     } catch (IOException e) {
       throw new IllegalStateException("Failed to deserialize checkpoint: " + e.getMessage(), e);
