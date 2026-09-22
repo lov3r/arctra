@@ -56,7 +56,7 @@ public class ProcedureExecutionHandler {
    * @throws ParameterBindingResolver.BindingResolutionException 如果参数绑定无法解析
    * @throws IllegalArgumentException 如果 procedure 和 executionState 不匹配
    */
-  public ProcedureExecutionCoordinator.StepExecutionResult executeNextStep(
+  public StepExecutionResult executeNextStep(
       ReusableProcedure procedure, ProcedureExecutionState executionState)
       throws ProcedureGovernanceException, ParameterBindingResolver.BindingResolutionException {
 

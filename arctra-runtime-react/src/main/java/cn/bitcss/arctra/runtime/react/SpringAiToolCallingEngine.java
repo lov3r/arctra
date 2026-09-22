@@ -5,7 +5,12 @@ import cn.bitcss.arctra.agent.AgentExecutionContext;
 import cn.bitcss.arctra.agent.AgentRequest;
 import cn.bitcss.arctra.agent.AgentResult;
 import cn.bitcss.arctra.checkpoint.CheckpointStore;
+import cn.bitcss.arctra.checkpoint.ContinuationDisposition;
+import cn.bitcss.arctra.checkpoint.PendingToolCall;
+import cn.bitcss.arctra.checkpoint.SuspensionCheckpoint;
 import cn.bitcss.arctra.evidence.Evidence;
+import cn.bitcss.arctra.execution.EventType;
+import cn.bitcss.arctra.execution.ExecutionEvent;
 import cn.bitcss.arctra.execution.ExecutionEventListener;
 import cn.bitcss.arctra.execution.ExecutionLedger;
 import cn.bitcss.arctra.governance.ToolGovernancePolicy;
@@ -32,8 +37,11 @@ import cn.bitcss.arctra.runtime.react.protocol.SpringAiResumedExecutionHandler;
 import cn.bitcss.arctra.runtime.react.protocol.ToolApprovalRequiredSignal;
 import cn.bitcss.arctra.runtime.react.tool.EvidenceCapturingToolCallback;
 import cn.bitcss.arctra.procedure.ProcedureExecutionHandler;
+import cn.bitcss.arctra.procedure.ProcedureExecutionState;
 import cn.bitcss.arctra.procedure.ReusableProcedure;
 import cn.bitcss.arctra.procedure.SimpleProcedureMatcher;
+import cn.bitcss.arctra.procedure.StepExecutionResult;
+import cn.bitcss.arctra.runtime.ProcessFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -97,6 +105,9 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
   // M8-Integration components (optional - null when not configured)
   private final SimpleProcedureMatcher procedureMatcher;
   private final ProcedureExecutionHandler procedureExecutionHandler;
+
+  // M8-Phase3.4: Execution event sink for emitting events
+  private final ExecutionEventListener executionEventSink;
 
   /**
    * Create a tool-calling engine with conversation memory and governance support (M4 ephemeral).
@@ -229,7 +240,7 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
 
     // M6-T2B.1: adapt ExecutionLedger to ExecutionEventListener once at construction
       // M6-T2B.1 execution event sink (always non-null)
-      ExecutionEventListener executionEventSink = adaptLedgerToListener(executionLedger);
+      this.executionEventSink = adaptLedgerToListener(executionLedger);
 
     // M6-T4E: Create invocation-state store paired with checkpoint store
     this.invocationStateStore = createMatchingInvocationStateStore(checkpointStore);
@@ -519,11 +530,9 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
         }
 
         if (stepResult.requiresApproval()) {
-          // TODO Phase 3.4: Create checkpoint and suspend
-          // For now, mark procedure as invalid and fall back to ReAct
-          // This indicates governance policy changed since procedure was learned
-          markProcedureInvalid(procedure, "REQUIRE_APPROVAL not yet implemented");
-          return executeReActPath(definition, request, context);
+          // Phase 3.4: Create checkpoint and suspend
+          return handleProcedureApprovalRequired(
+              procedure, executionState, stepResult, definition, context);
         }
 
         if (!stepResult.isAllowed()) {
@@ -584,6 +593,110 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
     String result = tool.call(pendingCall.arguments());
 
     return result != null ? result : "{}";
+  }
+
+  /**
+   * Handle REQUIRE_APPROVAL during procedure execution (M8-Phase3.4).
+   *
+   * <p>Creates a durable checkpoint with procedure execution state and suspends.
+   *
+   * <p><strong>Checkpoint semantics:</strong>
+   *
+   * <ul>
+   *   <li>disposition: WAITING_FOR_SIGNAL (requires approval to continue)
+   *   <li>procedureState: current execution state (for step-by-step resume)
+   *   <li>pendingBatch: the tool call that requires approval
+   * </ul>
+   *
+   * @param procedure procedure being executed
+   * @param executionState current procedure execution state
+   * @param stepResult step execution result (requiresApproval = true)
+   * @param definition agent definition
+   * @param context execution context
+   * @return suspended agent result with durable process
+   * @throws IllegalStateException if durable mode not configured
+   * @since M8-Phase3.4
+   */
+  private AgentResult handleProcedureApprovalRequired(
+      ReusableProcedure procedure,
+      ProcedureExecutionState executionState,
+      StepExecutionResult stepResult,
+      AgentDefinition definition,
+      AgentExecutionContext context) {
+
+    // Precondition: durable mode must be configured for checkpoint creation
+    if (checkpointStore == null || runtimeBindingKey == null) {
+      // Cannot suspend without durable configuration - fall back to ReAct
+      markProcedureInvalid(procedure, "REQUIRE_APPROVAL requires durable configuration");
+      // Create a synthetic request for ReAct fallback
+      AgentRequest fallbackRequest = new AgentRequest(
+          "Execute: " + procedure.steps().get(executionState.currentStepIndex()).toolName());
+      return executeReActPath(definition, fallbackRequest, context);
+    }
+
+    // 1. Generate stable processId
+    String processId = java.util.UUID.randomUUID().toString();
+
+    // 2. Build pendingBatch with single tool call that requires approval
+    PendingToolCall pendingCall = stepResult.pendingCall();
+    List<PendingToolCall> pendingBatch = List.of(pendingCall);
+
+    // 3. Build checkpoint with procedureState
+    SuspensionCheckpoint checkpoint =
+        new SuspensionCheckpoint(
+            SuspensionCheckpoint.CURRENT_SCHEMA_VERSION,
+            processId,
+            1L, // Initial version
+            runtimeBindingKey,
+            context.sessionId(),
+            ContinuationDisposition.WAITING_FOR_SIGNAL, // Requires approval
+            pendingBatch,
+            List.of(), // M8 V1: no evidence capture from cached execution
+            cn.bitcss.arctra.runtime.react.durable.ExecutionIncarnation.current(),
+            executionState); // Current procedure execution state
+
+    // 4. Persist checkpoint FIRST (durability-first)
+    try {
+      checkpointStore.create(checkpoint);
+    } catch (Exception e) {
+      // Checkpoint creation failed - fall back to ReAct
+      markProcedureInvalid(procedure, "Checkpoint creation failed: " + e.getMessage());
+      // Create a synthetic request for ReAct fallback
+      AgentRequest fallbackRequest = new AgentRequest(
+          "Execute: " + procedure.steps().get(executionState.currentStepIndex()).toolName());
+      return executeReActPath(definition, fallbackRequest, context);
+    }
+
+    // 5. Emit events
+    executionEventSink.onEvent(
+        new ExecutionEvent(
+            processId,
+            EventType.APPROVAL_REQUIRED,
+            null,
+            String.format(
+                "{\"toolName\": \"%s\", \"source\": \"cached_procedure\"}",
+                pendingCall.toolName())));
+
+    executionEventSink.onEvent(
+        new ExecutionEvent(
+            processId,
+            EventType.SUSPENDED,
+            1L,
+            String.format(
+                "{\"checkpointVersion\": 1, \"procedureId\": \"%s\", \"stepIndex\": %d}",
+                procedure.procedureId(), executionState.currentStepIndex())));
+
+    // 6. Create durable process (ONLY after checkpoint persisted)
+    AgentProcess process = ProcessFactory.createDurableSuspended(processId, 1L, this);
+
+    // 7. Return suspended result
+    String partialContent =
+        String.format(
+            "Procedure execution suspended: tool '%s' requires approval (step %d/%d)",
+            pendingCall.toolName(),
+            executionState.currentStepIndex() + 1,
+            procedure.steps().size());
+    return new AgentResult(partialContent, List.of(), process);
   }
 
   /**
