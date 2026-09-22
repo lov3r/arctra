@@ -1,6 +1,43 @@
 # Current State
 
-**Last Updated:** 2026-09-16 (M6-T6.1 ADVERSARIAL VALIDATION COMPLETE)
+**Last Updated:** 2026-09-22 (M8-Phase3.4.2 COMPLETE)
+
+---
+
+## Current Phase: M8 Procedure Reuse Integration 🚧 IN PROGRESS
+
+**状态：** M8-Phase3.4.2 COMPLETE (2026-09-22)
+
+**目标：** 集成 Procedure Reuse 能力到 SpringAiToolCallingEngine，支持缓存路径的 REQUIRE_APPROVAL 暂停和恢复
+
+**已完成：**
+- ✅ M8-Phase1: 过程存储基础设施
+- ✅ M8-Phase2: 候选提取（学习）
+- ✅ M8-Phase3.1: 简单过程匹配器
+- ✅ M8-Phase3.2: 过程执行处理器
+- ✅ M8-Phase3.3: 缓存路径的 ALLOW 执行（简单循环）
+- ✅ M8-Phase3.4.1: 缓存路径的 REQUIRE_APPROVAL 暂停支持
+- ✅ M8-Phase3.4.2: 过程恢复路由基础
+
+**M8-Phase3.4.2 关键实现：**
+- `resumeProcess()` 覆盖：检查 `checkpoint.procedureState()`
+- 路由分发：procedure resume vs ReAct resume (DurableResumeCoordinator)
+- `resumeProcedureExecution()` 方法骨架
+- APPROVED/REJECTED 信号处理
+- 事件发射：RESUMED / APPROVAL_REJECTED
+- Checkpoint DELETE on rejection (CHECK B)
+
+**当前限制（Phase 4 依赖）：**
+- ⚠️ 无法完成 APPROVED resume（需要 procedure store 查询能力）
+- ⚠️ 需要通过 `procedureState.procedureId()` 检索 `ReusableProcedure`
+- ⚠️ 当前抛出 `UnsupportedOperationException` 并提供清晰的 Phase 4 需求消息
+
+**Test Coverage:** 158 tests passed, 13 skipped
+
+**下一步：** 
+1. ⏳ M8-Phase4: Procedure Store 集成（查询能力）
+2. ⏳ 完成 resumeProcedureExecution 的实际执行逻辑
+3. ⏳ 添加 Scenario Test 验证完整 suspend-resume 流程
 
 ---
 

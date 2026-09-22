@@ -527,6 +527,80 @@ var result2 = engine.execute(
 
 ---
 
+---
+
+## M8: Procedure Reuse Integration 🚧 IN PROGRESS
+
+**状态：** M8-Phase3.4.2 COMPLETE (2026-09-22)
+
+**目标：** 集成 M7 Procedure Reuse 能力到 SpringAiToolCallingEngine，支持缓存路径执行
+
+**Definition of Done:**
+- ✅ 过程存储基础设施
+- ✅ 候选提取（学习）
+- ✅ 简单过程匹配器
+- ✅ 过程执行处理器
+- ✅ 缓存路径的 ALLOW 执行
+- ✅ 缓存路径的 REQUIRE_APPROVAL 暂停
+- ✅ 过程恢复路由基础
+- ⏳ Procedure Store 查询能力 (Phase 4)
+- ⏳ 完整 Resume 执行逻辑 (Phase 4)
+- ⏳ Scenario Tests (Phase 5)
+
+### M8-Phase3.4: 缓存路径的 REQUIRE_APPROVAL 支持
+
+#### M8-Phase3.4.1: 暂停支持 ✅ COMPLETE (2026-09-22)
+
+**交付物:**
+- ✅ `handleProcedureApprovalRequired()` 方法实现
+- ✅ ProcedureExecutionState 序列化到 checkpoint
+- ✅ 事件发射：APPROVAL_REQUIRED
+- ✅ Checkpoint 创建（CHECK A）
+- ✅ 编译通过，所有测试通过
+
+**关键实现:**
+- 复用 `DurableExecutionHandler.buildAndPersistCheckpoint()` 
+- 传递 `procedureState` 参数（之前为 null）
+- 创建 `SuspensionCheckpoint` with 10 parameters
+- 返回 suspension signal to caller
+
+#### M8-Phase3.4.2: 恢复路由基础 ✅ COMPLETE (2026-09-22)
+
+**交付物:**
+- ✅ `resumeProcess()` 覆盖实现
+- ✅ Checkpoint inspection: `procedureState` 字段检查
+- ✅ 路由分发：procedure resume vs ReAct resume
+- ✅ `resumeProcedureExecution()` 方法骨架
+- ✅ APPROVED/REJECTED 信号处理
+- ✅ 事件发射：RESUMED / APPROVAL_REJECTED
+- ✅ Checkpoint DELETE on rejection (CHECK B)
+- ✅ 编译通过，测试通过 (158/158, 13 skipped)
+
+**关键实现:**
+```java
+@Override
+public AgentResult resumeProcess(String processId, ContinuationSignal signal) {
+  // Load checkpoint
+  SuspensionCheckpoint checkpoint = checkpointStore.load(processId);
+  
+  // Route based on procedureState
+  if (checkpoint.procedureState() != null) {
+    return resumeProcedureExecution(checkpoint, signal);
+  } else {
+    return durableResumeCoordinator.resume(processId, signal);
+  }
+}
+```
+
+**当前限制 (Phase 4 依赖):**
+- ⚠️ `resumeProcedureExecution()` 抛出 `UnsupportedOperationException`
+- ⚠️ 需要 Procedure Store 查询能力：`store.find(procedureId)`
+- ⚠️ 需要完整执行循环：execute → advance → repeat until complete/re-suspend
+
+**下一步:** M8-Phase4 - Procedure Store 集成
+
+---
+
 ### Future Milestones (待规划)
 
 以下能力没有明确归属到具体 Milestone，后续根据优先级重新规划：
