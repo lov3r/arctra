@@ -976,21 +976,16 @@ public class SpringAiToolCallingEngine implements DurableExecutionEngine {
    * @return 过程定义
    * @throws ProcedureNotFoundException 如果过程不存在
    */
+  /**
+   * 从执行状态加载过程（M8-Phase4）。
+   *
+   * @param executionState 当前执行状态
+   * @return 对应的 ReusableProcedure
+   * @throws ProcedureNotFoundException 如果指定的 procedure revision 不存在
+   */
   private ReusableProcedure loadProcedureFromState(ProcedureExecutionState executionState) {
-    // We need direct access to procedureStore to load procedure
-    // This is called during resume, where we already have executionState but need the procedure
-    // ProcedureExecutionHandler has the store, but we need to access it through procedureMatcher
-
-    // V1 workaround: use executeNextStepFromState and catch the procedure from the error path
-    // This is inefficient but acceptable for V1
-    // TODO M8-Phase4.1: Add getProcedure(procedureId, revision) method to ProcedureExecutionHandler
     try {
-      StepExecutionResult result = procedureExecutionHandler.executeNextStepFromState(executionState);
-      // If we get here, we need to reconstruct the procedure from the result
-      // This is not ideal but works for V1
-      throw new UnsupportedOperationException(
-          "M8-Phase4: loadProcedureFromState needs refactoring - "
-          + "add explicit getProcedure method to ProcedureExecutionHandler");
+      return procedureExecutionHandler.getProcedure(executionState);
     } catch (ProcedureNotFoundException e) {
       throw e;
     } catch (Exception e) {

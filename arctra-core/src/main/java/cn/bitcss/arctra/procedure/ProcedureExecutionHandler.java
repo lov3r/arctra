@@ -128,4 +128,29 @@ public class ProcedureExecutionHandler {
     // 推进到下一步并保存输出
     return executionState.advanceStepWithOutput(output);
   }
+
+  /**
+   * 根据执行状态加载过程（M8-Phase4）。
+   *
+   * <p>用于需要访问完整 procedure 对象的场景（例如获取步骤信息）。
+   *
+   * @param executionState 当前执行状态（包含 procedureId 和 procedureRevision）
+   * @return 对应的 ReusableProcedure
+   * @throws ProcedureNotFoundException 如果指定的 procedure revision 不存在
+   */
+  public ReusableProcedure getProcedure(ProcedureExecutionState executionState)
+      throws ProcedureNotFoundException {
+
+    Objects.requireNonNull(executionState, "executionState cannot be null");
+
+    return procedureStore
+        .findRevision(executionState.procedureId(), executionState.procedureRevision())
+        .orElseThrow(
+            () ->
+                new ProcedureNotFoundException(
+                    "Procedure not found: "
+                        + executionState.procedureId()
+                        + " revision "
+                        + executionState.procedureRevision()));
+  }
 }

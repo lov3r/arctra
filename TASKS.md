@@ -531,7 +531,7 @@ var result2 = engine.execute(
 
 ## M8: Procedure Reuse Integration 🚧 IN PROGRESS
 
-**状态：** M8-Phase3.4.2 COMPLETE (2026-09-22)
+**状态：** M8-Phase3.4.3 COMPLETE (2026-09-23)
 
 **目标：** 集成 M7 Procedure Reuse 能力到 SpringAiToolCallingEngine，支持缓存路径执行
 
@@ -543,8 +543,8 @@ var result2 = engine.execute(
 - ✅ 缓存路径的 ALLOW 执行
 - ✅ 缓存路径的 REQUIRE_APPROVAL 暂停
 - ✅ 过程恢复路由基础
-- ⏳ Procedure Store 查询能力 (Phase 4)
-- ⏳ 完整 Resume 执行逻辑 (Phase 4)
+- ✅ Procedure Store 查询能力
+- ✅ 完整 Resume 执行逻辑
 - ⏳ Scenario Tests (Phase 5)
 
 ### M8-Phase3.4: 缓存路径的 REQUIRE_APPROVAL 支持
@@ -592,12 +592,37 @@ public AgentResult resumeProcess(String processId, ContinuationSignal signal) {
 }
 ```
 
-**当前限制 (Phase 4 依赖):**
-- ⚠️ `resumeProcedureExecution()` 抛出 `UnsupportedOperationException`
-- ⚠️ 需要 Procedure Store 查询能力：`store.find(procedureId)`
-- ⚠️ 需要完整执行循环：execute → advance → repeat until complete/re-suspend
+#### M8-Phase3.4.3: Procedure Store 查询与完整恢复 ✅ COMPLETE (2026-09-23)
 
-**下一步:** M8-Phase4 - Procedure Store 集成
+**交付物:**
+- ✅ `ProcedureExecutionHandler.getProcedure()` 方法实现
+- ✅ `resumeProcedureExecution()` 完整实现（替换 UnsupportedOperationException）
+- ✅ Procedure not found 处理（删除 checkpoint，返回错误）
+- ✅ 完整执行循环：executeNextStep → processProcedureStepResult → advance/complete/re-suspend
+- ✅ 编译通过，测试通过 (158/158, 13 skipped)
+
+**关键实现:**
+```java
+public ReusableProcedure getProcedure(ProcedureExecutionState executionState) {
+  return procedureStore
+      .findRevision(executionState.procedureId(), executionState.procedureRevision())
+      .orElseThrow(() -> new ProcedureNotFoundException(...));
+}
+
+private AgentResult resumeProcedureExecution(
+    SuspensionCheckpoint checkpoint, ContinuationSignal signal) {
+  // 1. Emit approval event
+  // 2. Handle REJECTED → delete checkpoint, return rejection
+  // 3. Handle APPROVED → execute next step
+  // 4. Process step result (advance/complete/re-suspend)
+}
+```
+
+**修改文件:**
+- `arctra-core/src/main/java/cn/bitcss/arctra/procedure/ProcedureExecutionHandler.java`
+- `arctra-runtime-react/src/main/java/cn/bitcss/arctra/runtime/react/SpringAiToolCallingEngine.java`
+
+**下一步:** M8-Phase4 - Scenario Tests (端到端学习周期验证)
 
 ---
 
