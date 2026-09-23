@@ -9,6 +9,7 @@ import cn.bitcss.arctra.governance.GovernanceDecision;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -22,14 +23,16 @@ class ProcedureExecutionHandlerTest {
   private ProcedureExecutionCoordinator coordinator;
   private OperationGovernanceEvaluator governanceEvaluator;
   private ParameterBindingResolver bindingResolver;
+  private ReusableProcedureStore procedureStore;
   private ProcedureExecutionHandler handler;
 
   @BeforeEach
   void setUp() {
     governanceEvaluator = mock(OperationGovernanceEvaluator.class);
     bindingResolver = mock(ParameterBindingResolver.class);
+    procedureStore = mock(ReusableProcedureStore.class);
     coordinator = new ProcedureExecutionCoordinator(governanceEvaluator, bindingResolver);
-    handler = new ProcedureExecutionHandler(coordinator);
+    handler = new ProcedureExecutionHandler(coordinator, procedureStore);
   }
 
   @Test
@@ -138,5 +141,60 @@ class ProcedureExecutionHandlerTest {
   private ProcedureStep createSimpleStep(int stepIndex) {
     var fingerprint = new ToolCompatibilityFingerprint("testTool", "hash1");
     return new ProcedureStep(stepIndex, "testTool", fingerprint, Map.of(), List.of());
+  }
+
+  // M8-Phase4: Test executeNextStepFromState with store lookup
+
+  @Test
+  void executeNextStepFromState_loadsFromStoreAndExecutes() throws Exception {
+    // 创建过程和执行状态
+    var procedure = createSimpleProcedure("proc-1", 1);
+    var executionState = ProcedureExecutionState.initial("proc-1", 1, Map.of("input", "value"));
+
+    // Mock store 返回 procedure
+    when(procedureStore.findRevision("proc-1", 1)).thenReturn(Optional.of(procedure));
+
+    // Mock 绑定解析和治理
+    when(bindingResolver.resolve(any(), any())).thenReturn(Map.of("param", "value"));
+    when(governanceEvaluator.evaluate(any(), any())).thenReturn(GovernanceDecision.ALLOW);
+
+    // 从状态执行下一步
+    var result = handler.executeNextStepFromState(executionState);
+
+    // 验证从 store 加载
+    verify(procedureStore).findRevision("proc-1", 1);
+
+    // 验证执行结果
+    assertFalse(result.isCompleted());
+    assertTrue(result.isAllowed());
+    assertNotNull(result.pendingCall());
+    assertEquals("testTool", result.pendingCall().toolName());
+  }
+
+  @Test
+  void executeNextStepFromState_throwsWhenProcedureNotFound() {
+    var executionState = ProcedureExecutionState.initial("proc-not-found", 1, Map.of());
+
+    // Mock store 返回 empty
+    when(procedureStore.findRevision("proc-not-found", 1)).thenReturn(Optional.empty());
+
+    // 验证抛出 ProcedureNotFoundException
+    assertThrows(
+        ProcedureNotFoundException.class,
+        () -> handler.executeNextStepFromState(executionState));
+
+    verify(procedureStore).findRevision("proc-not-found", 1);
+  }
+
+  @Test
+  void executeNextStepFromState_throwsWhenRevisionMismatch() {
+    var executionState = ProcedureExecutionState.initial("proc-1", 999, Map.of());
+
+    // Mock store 返回 empty（修订不存在）
+    when(procedureStore.findRevision("proc-1", 999)).thenReturn(Optional.empty());
+
+    assertThrows(
+        ProcedureNotFoundException.class,
+        () -> handler.executeNextStepFromState(executionState));
   }
 }

@@ -25,6 +25,8 @@ import java.util.Objects;
  *    → 返回新的 executionState
  * </pre>
  *
+ * <p><strong>M8-Phase4 扩展：</strong>持有 ReusableProcedureStore，支持从 checkpoint 恢复时查询 procedure。
+ *
  * <p><strong>V1 简化：</strong>
  *
  * <ul>
@@ -39,9 +41,12 @@ import java.util.Objects;
 public class ProcedureExecutionHandler {
 
   private final ProcedureExecutionCoordinator coordinator;
+  private final ReusableProcedureStore procedureStore;
 
-  public ProcedureExecutionHandler(ProcedureExecutionCoordinator coordinator) {
+  public ProcedureExecutionHandler(
+      ProcedureExecutionCoordinator coordinator, ReusableProcedureStore procedureStore) {
     this.coordinator = Objects.requireNonNull(coordinator, "coordinator cannot be null");
+    this.procedureStore = Objects.requireNonNull(procedureStore, "procedureStore cannot be null");
   }
 
   /**
@@ -65,6 +70,39 @@ public class ProcedureExecutionHandler {
 
     // 委托给 coordinator
     return coordinator.prepareNextStep(procedure, executionState);
+  }
+
+  /**
+   * 从执行状态加载过程并执行下一步（M8-Phase4）。
+   *
+   * <p>用于从 checkpoint 恢复时，根据 executionState 查询 procedure 并继续执行。
+   *
+   * @param executionState 当前执行状态（包含 procedureId 和 procedureRevision）
+   * @return 步骤执行结果
+   * @throws ProcedureNotFoundException 如果指定的 procedure revision 不存在
+   * @throws ProcedureGovernanceException 如果步骤被治理策略拒绝
+   * @throws ParameterBindingResolver.BindingResolutionException 如果参数绑定无法解析
+   */
+  public StepExecutionResult executeNextStepFromState(ProcedureExecutionState executionState)
+      throws ProcedureNotFoundException, ProcedureGovernanceException,
+          ParameterBindingResolver.BindingResolutionException {
+
+    Objects.requireNonNull(executionState, "executionState cannot be null");
+
+    // 从 store 查询 procedure
+    ReusableProcedure procedure =
+        procedureStore
+            .findRevision(executionState.procedureId(), executionState.procedureRevision())
+            .orElseThrow(
+                () ->
+                    new ProcedureNotFoundException(
+                        "Procedure not found: "
+                            + executionState.procedureId()
+                            + " revision "
+                            + executionState.procedureRevision()));
+
+    // 委托给现有的 executeNextStep
+    return executeNextStep(procedure, executionState);
   }
 
   /**
